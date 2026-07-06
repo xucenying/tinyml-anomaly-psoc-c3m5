@@ -6,7 +6,7 @@ Each task has a "done when" check. Do them in order; one variable at a time in P
 
 - [ ] **1.1** ModusToolbox → Project Creator → board `KIT_PSC3M5_EVK` → "Hello World" example → Build → Program. *Done when: LED blinks.*
 - [ ] **1.2** Find COM port (Device Manager → Ports), open serial terminal at 115200 baud. *Done when: text from the board appears.*
-- [ ] **1.3** Find/build an Infineon ML code example for PSC3M5 (`mtb-example-ml-...`); else add TFLite-Micro middleware to Hello World. *Done when: UART prints an inference result.*
+- [ ] **1.3** ~~Find Infineon ML example~~ (confirmed 2026-07-06: none exist for PSOC Control C3 — official ML flow covers PSoC 6/Edge only). Manual TFLM port instead: follow `firmware/README-tflm-port.md` (generate TFLM tree → graft into Hello World project → flash `main.cpp` sine-model smoke test). *Done when: UART prints predicted vs true sin(x).* Bonus: this makes us the first public TFLM port to PSOC Control C3 — reusable-artifact points.
 - [ ] **1.4** PC: `python -m venv .venv`, install `tensorflow numpy scipy matplotlib`. *Done when: `import tensorflow` works.*
 - [ ] **1.5** Download MaFaulDa + CWRU; load one file, plot waveform. *Done when: signal visible.*
 - [ ] **1.6** Preprocessing script: window → FFT/spectrogram → features+labels .npz. *Done when: correct feature shapes.*
@@ -42,8 +42,4 @@ Each task has a "done when" check. Do them in order; one variable at a time in P
 - [ ] **4.3** `download_data.py`: one-command dataset fetch + preprocess (never commit raw data)
 - [ ] **4.4** Clean-machine test of your own README; fix every snag (DevEx points live here)
 - [ ] **4.5** Arm Performix run where applicable
-- [ ] **4.6** Post in Arm Discord for feedback before submitting
-
-## Phase 0 + 5 (reference)
-Phase 0: Devpost registration, Arm Discord, GitHub push, ModusToolbox install, repo clones to `..\arm-refs\`.
-Phase 5 (Aug 10–13): record ≤3-min video, write Devpost text, submit Aug 13.
+- [ ] **4.6
