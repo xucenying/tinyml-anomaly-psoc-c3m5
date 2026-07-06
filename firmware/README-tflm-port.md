@@ -6,6 +6,13 @@ not yet tested on hardware** — expect to iterate.
 
 Two routes; try A first, fall back to B.
 
+> **2026-07-07 update: the trees are already generated and committed.**
+> `tflm-tree-ref/` and `tflm-tree-cmsisnn/` (this folder) were produced in Claude's
+> Linux workspace with the exact commands below (deps pre-seeded from GitHub
+> mirrors because the proxy blocked wget/googlesource). `model_data.h` (sine
+> model) is also done. **Skip straight to the ModusToolbox steps (1–4 below),
+> using `tflm-tree-ref` as the copy source.**
+
 ## Route A (recommended): generate a TFLM source tree, drop into ModusToolbox
 
 TFLM ships a script that produces a clean, self-contained source tree — no bazel,
@@ -65,12 +72,4 @@ python convert_tflite_to_c.py \
 ```
 
 Success = UART prints x, predicted sin(x), true sin(x) pairs. Then 1.3 is done
-and Phase-1 continues with our real anomaly model in place of the sine model.
-
-## Known risks (log findings here)
-
-- [ ] Flash/RAM: TFLM core ≈ 40–100 KB flash depending on kernels registered —
-      fits our 256 KB, but keep the op resolver minimal (only ops the model uses)
-- [ ] `-std=c++17` collides with BSP C flags? Set per-language flags if so
-- [ ] DWT lock on PSOC C3 (harness 1.9) — unrelated to TFLM but same session
-- [ ] If linker overflows SRAM: shrink `kTensorArenaSize` in main.cpp first
+and Phase-1 continues with our real anomaly model in place of the sine mode
