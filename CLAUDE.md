@@ -36,4 +36,5 @@ Key repos: ARM-software/CMSIS-NN, ARM-software/CMSIS-DSP, tensorflow/tflite-micr
 
 ## Status log (append entries here)
 - 2026-07-06: Research done, plan written, concept locked. Next: register on Devpost, join Arm Discord, flash blink on C3M5, run stock TFLM model.
-- 2026-07-06: Created `datasets.md` (recommendation: train MaFaulDa, validate CWRU, stretch Paderborn current-signal). Created `harness/` (bench.h/bench.c DWT cycle counter for M33, results_table.py stage tracker — host side tested OK with synthetic log). Open item: verify DWT unlock on PSOC C3; add TFLM arena high-water-mark instrumentation.
+- 2026-07-06: Git repo initialized (branch `main`, .gitignore added, initial commit b1ac1be). Remote/push pending: user to create GitHub repo (suggest `tinyml-anomaly-psoc-c3m5`), then `git remote add origin ... && git push -u origin main`. Must be public with Apache-2.0 visible in About before submission.
+- 2026-07-06: Created `datasets.md` (re
