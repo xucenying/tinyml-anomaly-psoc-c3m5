@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Datasets & large artifacts (ship download scripts instead)
+data/
+datasets/
+*.h5
+*.npz
+*.zip
+*.tar.gz
+
+# Model intermediates (keep final .tflite/.pte in repo deliberately)
+checkpoints/
+runs/
+*.ckpt
+
+# ModusToolbox / firmware build output
+build/
+BUILD/
+libs/
+mtb_shared/
+*.hex
+*.elf
+*.map
+*.o
+*.d
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local captures / scratch
+*.log
+capture*.txt
