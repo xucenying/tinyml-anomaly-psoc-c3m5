@@ -44,7 +44,7 @@ Then in your ModusToolbox "Hello World" project for KIT_PSC3M5_EVK:
                tflite-micro/third_party/gemmlowp tflite-micro/third_party/kissfft \
                tflite-micro/third_party/ruy
    DEFINES  += TF_LITE_STATIC_MEMORY
-   CXXFLAGS += -std=c++17 -fno-rtti -fno-exceptions -fno-threadsafe-statics
+   CXXFLAGS += -std=c++17 -fno-rtti -fno-exceptions -fno-threadsafe-statics -include cstring
    ```
    (ModusToolbox auto-discovers sources in the project dir on recent versions —
    if so, only the INCLUDES/DEFINES/CXXFLAGS lines are needed. Check `Makefile`
@@ -72,4 +72,4 @@ python convert_tflite_to_c.py \
 ```
 
 Success = UART prints x, predicted sin(x), true sin(x) pairs. Then 1.3 is done
-and Phase-1 continues with our real anomaly model in place of the sine mode
+and Phase-1 continues with our real anomaly model in place
