@@ -1,14 +1,16 @@
 /*
  * main.cpp — TFLite-Micro smoke test for PSOC Control C3M5 (KIT_PSC3M5_EVK)
  * Runs the TFLM "hello world" sine model: predicts sin(x) for x in [0, 2π).
- * Success = UART prints predicted vs true values. Apache-2.0.
- *
- * Status: NOT yet hardware-tested. Bring build errors back to Claude.
+ * UART init mirrors Infineon's mtb-example-ce240510-hello-world (PDL + HAL).
+ * Apache-2.0.
  */
+#include "cy_pdl.h"
 #include "cybsp.h"
 #include "cy_retarget_io.h"
+#include "mtb_hal.h"
+
 #include <cstdio>
-#include <cmath>
+#include <math.h>
 
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
@@ -17,27 +19,40 @@
 
 #include "model_data.h"   /* generated: convert_tflite_to_c.py -> g_model_data[] */
 
+/* Retarget-IO (Debug UART) — same objects as the stock Hello World example */
+static cy_stc_scb_uart_context_t DEBUG_UART_context;
+static mtb_hal_uart_t            DEBUG_UART_hal_obj;
+
 /* Tensor arena: working memory for activations. Sine model needs ~2-4 KB;
  * our real anomaly model will need more. 64 KB SRAM total — budget carefully. */
 constexpr int kTensorArenaSize = 8 * 1024;
 alignas(16) static uint8_t tensor_arena[kTensorArenaSize];
 
+static void halt(const char *msg)
+{
+    printf("FATAL: %s\r\n", msg);
+    for (;;) {}
+}
+
 int main(void)
 {
-    if (cybsp_init() != CY_RSLT_SUCCESS) { for (;;) {} }
+    /* Board init (clocks, pins) */
+    if (cybsp_init() != CY_RSLT_SUCCESS) { CY_ASSERT(0); }
     __enable_irq();
 
-    /* UART for printf via KitProg3 (adjust TX/RX macros if BSP names differ) */
-    cy_retarget_io_init(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX, 115200);
+    /* Debug UART init — PDL first, then HAL wrapper, then retarget printf */
+    if (Cy_SCB_UART_Init(DEBUG_UART_HW, &DEBUG_UART_config,
+                         &DEBUG_UART_context) != CY_SCB_UART_SUCCESS) { CY_ASSERT(0); }
+    Cy_SCB_UART_Enable(DEBUG_UART_HW);
+    if (mtb_hal_uart_setup(&DEBUG_UART_hal_obj, &DEBUG_UART_hal_config,
+                           &DEBUG_UART_context, NULL) != CY_RSLT_SUCCESS) { CY_ASSERT(0); }
+    if (cy_retarget_io_init(&DEBUG_UART_hal_obj) != CY_RSLT_SUCCESS) { CY_ASSERT(0); }
 
-    printf("\r\n=== TFLM smoke test: PSOC Control C3M5 ===\r\n");
+    printf("\x1b[2J\x1b[;H");   /* clear terminal */
+    printf("=== TFLM smoke test: PSOC Control C3M5 ===\r\n");
 
     const tflite::Model *model = tflite::GetModel(g_model_data);
-    if (model->version() != TFLITE_SCHEMA_VERSION) {
-        printf("Schema mismatch: model %lu, runtime %d\r\n",
-               (unsigned long)model->version(), TFLITE_SCHEMA_VERSION);
-        for (;;) {}
-    }
+    if (model->version() != TFLITE_SCHEMA_VERSION) halt("schema mismatch");
 
     /* Register ONLY the ops the model uses — keeps flash small.
      * hello_world uses FullyConnected only. */
@@ -46,10 +61,9 @@ int main(void)
 
     static tflite::MicroInterpreter interpreter(model, resolver,
                                                 tensor_arena, kTensorArenaSize);
-    if (interpreter.AllocateTensors() != kTfLiteOk) {
-        printf("AllocateTensors failed (arena too small?)\r\n");
-        for (;;) {}
-    }
+    if (interpreter.AllocateTensors() != kTfLiteOk)
+        halt("AllocateTensors failed (arena too small?)");
+
     printf("Arena used: %u / %d bytes\r\n",
            (unsigned)interpreter.arena_used_bytes(), kTensorArenaSize);
 
@@ -63,22 +77,9 @@ int main(void)
     const int   out_zp    = out->params.zero_point;
 
     for (int i = 0; i < 16; ++i) {
-        const float x = (6.2831853f * i) / 16.0f;
-        in->data.int8[0] = (int8_t)(x / in_scale + in_zp);
+        const float x = (6.2831853f * (float)i) / 16.0f;
+        in->data.int8[0] = (int8_t)(x / in_scale + (float)in_zp);
 
-        if (interpreter.Invoke() != kTfLiteOk) {
-            printf("Invoke failed at i=%d\r\n", i);
-            for (;;) {}
-        }
-        const float y = (out->data.int8[0] - out_zp) * out_scale;
-        /* int math for printf portability: values x100 */
-        printf("x=%d.%02u  sin_pred=%s%d.%02u  sin_true=%s%d.%02u\r\n",
-               (int)x, (unsigned)((x - (int)x) * 100),
-               y < 0 ? "-" : "", (int)fabsf(y), (unsigned)((fabsf(y) - (int)fabsf(y)) * 100),
-               sinf(x) < 0 ? "-" : "", (int)fabsf(sinf(x)),
-               (unsigned)((fabsf(sinf(x)) - (int)fabsf(sinf(x))) * 100));
-    }
+        if (interpreter.Invoke() != kTfLiteOk) halt("Invoke failed");
 
-    printf("=== smoke test complete ===\r\n");
-    for (;;) {}
-}
+        const float y  = ((float)out->data.int
