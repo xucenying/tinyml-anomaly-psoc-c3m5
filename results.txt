@@ -1,0 +1,35 @@
+Run A:
+
+=== CWRU bearing-fault classifier: PSOC Control C3M5 ===
+model: 24152 bytes
+arena used: 2324 / 16384 bytes
+[PASS] true=b_007   pred=b_007   conf= 99%  cycles=84857 (353 us)
+[PASS] true=b_014   pred=b_014   conf= 99%  cycles=83557 (348 us)
+[PASS] true=b_021   pred=b_021   conf= 99%  cycles=83550 (348 us)
+[PASS] true=ir_007  pred=ir_007  conf= 99%  cycles=84129 (350 us)
+[PASS] true=ir_014  pred=ir_014  conf= 99%  cycles=83753 (348 us)
+[PASS] true=ir_021  pred=ir_021  conf= 99%  cycles=83869 (349 us)
+[PASS] true=normal  pred=normal  conf= 99%  cycles=83837 (349 us)
+[PASS] true=or_007  pred=or_007  conf= 99%  cycles=83530 (348 us)
+[PASS] true=or_014  pred=or_014  conf= 99%  cycles=83498 (347 us)
+[PASS] true=or_021  pred=or_021  conf= 99%  cycles=83499 (347 us)
+10/10 correct, avg 83807 cycles/inference (349 us @240MHz)
+=== classifier test complete ===
+
+Run B:
+
+=== CWRU bearing-fault classifier: PSOC Control C3M5 ===
+model: 24152 bytes
+arena used: 2228 / 16384 bytes
+[PASS] true=b_007   pred=b_007   conf= 99%  cycles=181369 (755 us)
+[PASS] true=b_014   pred=b_014   conf= 99%  cycles=180697 (752 us)
+[PASS] true=b_021   pred=b_021   conf= 99%  cycles=180579 (752 us)
+[PASS] true=ir_007  pred=ir_007  conf= 99%  cycles=180650 (752 us)
+[PASS] true=ir_014  pred=ir_014  conf= 99%  cycles=180633 (752 us)
+[PASS] true=ir_021  pred=ir_021  conf= 99%  cycles=180525 (752 us)
+[PASS] true=normal  pred=normal  conf= 99%  cycles=181015 (754 us)
+[PASS] true=or_007  pred=or_007  conf= 99%  cycles=180720 (753 us)
+[PASS] true=or_014  pred=or_014  conf= 99%  cycles=180515 (752 us)
+[PASS] true=or_021  pred=or_021  conf= 99%  cycles=180581 (752 us)
+10/10 correct, avg 180728 cycles/inference (753 us @240MHz)
+=== classifier test complete ===
