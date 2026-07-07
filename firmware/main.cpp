@@ -15,7 +15,8 @@
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 
-#include "model_data.h"     /* INT8 CWRU classifier (24 KB) */
+/* Pick ONE: model_data.h (INT8, 24 KB) or model_data_fp32.h (FP32, 72 KB) */
+#include "model_data.h"
 #include "test_vectors.h"   /* 10 validation feature vectors */
 
 static cy_stc_scb_uart_context_t DEBUG_UART_context;
@@ -50,7 +51,7 @@ int main(void)
 
     printf("\x1b[2J\x1b[;H");
     printf("=== CWRU bearing-fault classifier: PSOC Control C3M5 ===\r\n");
-    printf("model: %u bytes INT8\r\n", (unsigned)g_model_data_len);
+    printf("model: %u bytes\r\n", (unsigned)g_model_data_len);
 
     const tflite::Model *model = tflite::GetModel(g_model_data);
     if (model->version() != TFLITE_SCHEMA_VERSION) halt("schema mismatch");
@@ -76,12 +77,17 @@ int main(void)
     uint64_t total_cycles = 0;
 
     for (int t = 0; t < kNumTests; ++t) {
-        /* quantize the float feature vector to int8 (on-device, like live path) */
-        for (int i = 0; i < kFeatureDim; ++i) {
-            float q = kTestVectors[t][i] / in_scale + (float)in_zp;
-            if (q > 127.0f) q = 127.0f;
-            if (q < -128.0f) q = -128.0f;
-            in->data.int8[i] = (int8_t)q;
+        /* feed input: quantize for INT8 models, copy for FP32 models */
+        if (in->type == kTfLiteInt8) {
+            for (int i = 0; i < kFeatureDim; ++i) {
+                float q = kTestVectors[t][i] / in_scale + (float)in_zp;
+                if (q > 127.0f) q = 127.0f;
+                if (q < -128.0f) q = -128.0f;
+                in->data.int8[i] = (int8_t)q;
+            }
+        } else {
+            for (int i = 0; i < kFeatureDim; ++i)
+                in->data.f[i] = kTestVectors[t][i];
         }
 
         uint32_t t0 = dwt_now();
@@ -90,10 +96,16 @@ int main(void)
         total_cycles += dt;
 
         int best = 0;
-        for (int i = 1; i < kNumTests; ++i)
-            if (out->data.int8[i] > out->data.int8[best]) best = i;
-        int conf_pct = (int)(((float)out->data.int8[best] - (float)out_zp)
-                             * out_scale * 100.0f);
+        if (out->type == kTfLiteInt8) {
+            for (int i = 1; i < kNumTests; ++i)
+                if (out->data.int8[i] > out->data.int8[best]) best = i;
+        } else {
+            for (int i = 1; i < kNumTests; ++i)
+                if (out->data.f[i] > out->data.f[best]) best = i;
+        }
+        int conf_pct = (out->type == kTfLiteInt8)
+            ? (int)(((float)out->data.int8[best] - (float)out_zp) * out_scale * 100.0f)
+            : (int)(out->data.f[best] * 100.0f);
         bool ok = (best == kTestExpected[t]);
         correct += ok;
 
