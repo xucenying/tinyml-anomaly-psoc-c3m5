@@ -152,11 +152,13 @@ class FlatBufferBuilderImpl {
     swap(minalign_, other.minalign_);
     swap(force_defaults_, other.force_defaults_);
     swap(dedup_vtables_, other.dedup_vtables_);
-    swap(string_pool, other.string_pool);
+    // TFLM doesn't use dynamic memory allocation.
+    // swap(string_pool, other.string_pool);
   }
 
   ~FlatBufferBuilderImpl() {
-    if (string_pool) delete string_pool;
+    // TFLM doesn't use dynamic memory allocation.
+    // if (string_pool) delete string_pool;
   }
 
   void Reset() {
@@ -173,7 +175,8 @@ class FlatBufferBuilderImpl {
     finished = false;
     minalign_ = 1;
     length_of_64_bit_region_ = 0;
-    if (string_pool) string_pool->clear();
+    // TFLM doesn't use dynamic memory allocation.
+    // if (string_pool) string_pool->clear();
   }
 
   /// @brief The current size of the serialized buffer, counting from the end.
