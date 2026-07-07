@@ -43,7 +43,7 @@ Then in your ModusToolbox "Hello World" project for KIT_PSC3M5_EVK:
    CY_IGNORE+=tflite-micro
    SOURCES+=$(shell find tflite-micro -name '*.c' -o -name '*.cc')
    INCLUDES+=tflite-micro tflite-micro/third_party/flatbuffers/include tflite-micro/third_party/gemmlowp tflite-micro/third_party/kissfft tflite-micro/third_party/ruy
-   DEFINES+=TF_LITE_STATIC_MEMORY
+   DEFINES+=TF_LITE_STATIC_MEMORY PROJECT_GENERATION
    CXXFLAGS+=-std=c++17 -fno-rtti -fno-exceptions -fno-threadsafe-statics
    ```
    **`CY_IGNORE` is load-bearing.** ModusToolbox auto-discovery otherwise adds
@@ -72,4 +72,4 @@ python convert_tflite_to_c.py \
   model_data.h
 ```
 
-Success
+Success- **micro_time.cc DWT/DCB undeclared (2026-07-07):** TFLM's cortex_m_generic timer needs CMSIS_DEVICE_ARM_CORTEX_M_XX_HEADER_FILE, which MTB does not define. Fix: DEFINES+=PROJECT_GENERATION (stubs TFLM timing; our harness has its own DWT counter).
