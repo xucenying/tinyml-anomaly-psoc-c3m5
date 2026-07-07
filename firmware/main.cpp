@@ -82,4 +82,13 @@ int main(void)
 
         if (interpreter.Invoke() != kTfLiteOk) halt("Invoke failed");
 
-        const float y  = ((float)out->data.int
+        const float y  = ((float)out->data.int8[0] - (float)out_zp) * out_scale;
+        const float yt = sinf(x);
+        /* print as milli-units to avoid float printf dependency */
+        printf("x_milli=%5d  sin_pred_milli=%5d  sin_true_milli=%5d\r\n",
+               (int)(x * 1000.0f), (int)(y * 1000.0f), (int)(yt * 1000.0f));
+    }
+
+    printf("=== smoke test complete ===\r\n");
+    for (;;) {}
+}
