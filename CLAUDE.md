@@ -35,5 +35,6 @@ ModusToolbox (Infineon), arm-none-eabi-gcc, TFLite-Micro + CMSIS-NN/CMSIS-DSP, P
 Key repos: ARM-software/CMSIS-NN, ARM-software/CMSIS-DSP, tensorflow/tflite-micro, pytorch/executorch, Infineon/TARGET_KIT_PSC3M5_EVK.
 
 ## Status log (append entries here)
+- 2026-07-08: **MILESTONE: TFLM smoke test PASSED on the C3M5.** Sine model inference on-device, arena 676 B, .text 68 KB (26% flash). First public TFLM run on PSOC Control C3. Working project: example_psoc/hello-world (Makefile lines 117-121 = integration block). Fix chain: CY_IGNORE auto-discovery shadowing -> vendor patches (kissfft guard) -> PROJECT_GENERATION define. Next: 1.4-1.8 (train + quantize anomaly model), user to register Devpost + join Arm Discord.
 - 2026-07-06 (later): No Infineon ML example exists for PSOC Control C3 (MTB-ML/DEEPCRAFT = PSoC 6/Edge only). Created `firmware/` TFLM port scaffold: README-tflm-port.md (Route A: create_tflm_tree.py cortex-m33; Route B: jeldriks/mtb-tflite-micro), main.cpp (sine-model smoke test, NOT hardware-tested), convert_tflite_to_c.py (tested). Angle: first public TFLM+CMSIS-NN port to PSOC Control C3 = reusable artifact.
 - 2026-07-06: Research done, plan written, concept locked. Next: register on 
