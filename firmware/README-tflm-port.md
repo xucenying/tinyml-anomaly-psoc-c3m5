@@ -42,7 +42,7 @@ Then in your ModusToolbox "Hello World" project for KIT_PSC3M5_EVK:
    # --- TFLite-Micro (manual integration; keep out of auto-discovery) ---
    CY_IGNORE+=tflite-micro
    SOURCES+=$(shell find tflite-micro -name '*.c' -o -name '*.cc')
-   INCLUDES+=tflite-micro tflite-micro/third_party/flatbuffers/include tflite-micro/third_party/gemmlowp tflite-micro/third_party/kissfft tflite-micro/third_party/ruy
+   INCLUDES+=tflite-micro tflite-micro/third_party/flatbuffers/include tflite-micro/third_party/gemmlowp tflite-micro/third_party/kissfft tflite-micro/third_party/ruy tflite-micro/third_party/cmsis_nn tflite-micro/third_party/cmsis_nn/Include
    DEFINES+=TF_LITE_STATIC_MEMORY PROJECT_GENERATION
    CXXFLAGS+=-std=c++17 -fno-rtti -fno-exceptions -fno-threadsafe-statics
    ```
