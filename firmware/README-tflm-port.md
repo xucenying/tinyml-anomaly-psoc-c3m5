@@ -44,6 +44,7 @@ Then in your ModusToolbox "Hello World" project for KIT_PSC3M5_EVK:
    SOURCES+=$(shell find tflite-micro -name '*.c' -o -name '*.cc')
    INCLUDES+=tflite-micro tflite-micro/third_party/flatbuffers/include tflite-micro/third_party/gemmlowp tflite-micro/third_party/kissfft tflite-micro/third_party/ruy tflite-micro/third_party/cmsis_nn tflite-micro/third_party/cmsis_nn/Include
    DEFINES+=TF_LITE_STATIC_MEMORY PROJECT_GENERATION
+   # when using tflm-tree-cmsisnn, additionally: DEFINES+=CMSIS_NN
    CXXFLAGS+=-std=c++17 -fno-rtti -fno-exceptions -fno-threadsafe-statics
    ```
    **`CY_IGNORE` is load-bearing.** ModusToolbox auto-discovery otherwise adds
