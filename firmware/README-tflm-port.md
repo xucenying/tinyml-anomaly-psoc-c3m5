@@ -39,16 +39,17 @@ Then in your ModusToolbox "Hello World" project for KIT_PSC3M5_EVK:
 1. Copy `tflm-tree-ref/` into the project as `tflite-micro/`.
 2. Edit the project `Makefile`:
    ```make
-   SOURCES += $(wildcard tflite-micro/tensorflow/**/*.cc) $(wildcard tflite-micro/third_party/**/*.c*)
-   INCLUDES += tflite-micro tflite-micro/third_party/flatbuffers/include \
-               tflite-micro/third_party/gemmlowp tflite-micro/third_party/kissfft \
-               tflite-micro/third_party/ruy
-   DEFINES  += TF_LITE_STATIC_MEMORY
-   CXXFLAGS += -std=c++17 -fno-rtti -fno-exceptions -fno-threadsafe-statics -include cstring
+   # --- TFLite-Micro (manual integration; keep out of auto-discovery) ---
+   CY_IGNORE+=tflite-micro
+   SOURCES+=$(shell find tflite-micro -name '*.c' -o -name '*.cc')
+   INCLUDES+=tflite-micro tflite-micro/third_party/flatbuffers/include tflite-micro/third_party/gemmlowp tflite-micro/third_party/kissfft tflite-micro/third_party/ruy
+   DEFINES+=TF_LITE_STATIC_MEMORY
+   CXXFLAGS+=-std=c++17 -fno-rtti -fno-exceptions -fno-threadsafe-statics
    ```
-   (ModusToolbox auto-discovers sources in the project dir on recent versions —
-   if so, only the INCLUDES/DEFINES/CXXFLAGS lines are needed. Check `Makefile`
-   comments in your generated project.)
+   **`CY_IGNORE` is load-bearing.** ModusToolbox auto-discovery otherwise adds
+   every subfolder to the include path — including `flatbuffers/include/flatbuffers/`,
+   whose `string.h` then shadows the system `<string.h>` and breaks
+   `memcpy`/`strcmp`/`memset` across the entire build (found the hard way, 2026-07-07).
 3. Replace `main.c` with our `main.cpp` (this folder) and add `model_data.h`
    (generate with `convert_tflite_to_c.py`, see below).
 4. Build. First build will surface missing-include or flag issues — fix one at a
@@ -71,5 +72,4 @@ python convert_tflite_to_c.py \
   model_data.h
 ```
 
-Success = UART prints x, predicted sin(x), true sin(x) pairs. Then 1.3 is done
-and Phase-1 continues with our real anomaly model in place
+Success
