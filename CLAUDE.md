@@ -35,6 +35,7 @@ ModusToolbox (Infineon), arm-none-eabi-gcc, TFLite-Micro + CMSIS-NN/CMSIS-DSP, P
 Key repos: ARM-software/CMSIS-NN, ARM-software/CMSIS-DSP, tensorflow/tflite-micro, pytorch/executorch, Infineon/TARGET_KIT_PSC3M5_EVK.
 
 ## Status log (append entries here)
+- 2026-07-09 (evening): **PHASE 2 CORE COMPLETE. Final -O2 column: fp32 140,246 / int8_ref 180,728 / int8_cmsisnn 83,807 cyc (349 us).** Headline findings: naive INT8 1.29x SLOWER than FP32+FPU; CMSIS-NN = 2.16x vs naive INT8, 1.67x vs FP32, 3x smaller model; 3.89x vs all-default config. benchmarks/results.md rewritten as definitive table. Next: Phase 3 demo (replay rig, alert logic), optional per-op profiling / Corstone.
 - 2026-07-09 (later): **fp32 row measured: 140,246 cyc / 584 us** (-O2, softfp/FPU, arena 1,712 B). KEY INSIGHT: FP32+FPU beats naive INT8 (326k) — INT8 only wins via CMSIS-NN. Pending for consistent -O2 column: re-run int8_cmsisnn under softfp (Run A) and int8_ref at -O2 (Run B, remove CMSIS_NN define with ref tree).
 - 2026-07-09: **-O2 rung: 84,374 cyc / 351 us** (-13% vs -Os/-Og). Total ladder 3.87x. CFLAGS+=-O2 CXXFLAGS+=-O2 in project Makefile (overrides Release -Os). Remaining: fp32_ref on-device row, per-op profiling, then Phase 3 demo.
 - 2026-07-08 (evening): **RUNG 2 DONE: CMSIS-NN = 3.36x.** 97,147 cyc / 404 us vs 326,236 / 1,359 us baseline. 10/10 both. Arena 2,324 B (+96 B). Required: cmsis_nn include paths + CMSIS_NN define (see README-tflm-port.md). Remaining rungs: fp32_ref on-device, Release(-O2) build, per-op profiling, Corstone-300 stretch. Then Phase 3 demo.
