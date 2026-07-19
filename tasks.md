@@ -28,9 +28,9 @@ Each task has a "done when" check. Do them in order; one variable at a time in P
 
 ## Phase 3 — Demo & extension (Jul 27–Aug 2)
 
-- [ ] **3.1** Choose demo input: replay first; order mikroBUS accelerometer (~$20) now if going live
-- [ ] **3.2** Replay path: PC streams samples over UART → board classifies continuously. *Done when: "normal" prints on normal data.*
-- [ ] **3.3** Alert logic: fault type + confidence + LED + optional CAN-FD frame. *Done when: fault data triggers alert in ms.*
+- [x] **3.1** ~~Choose demo input~~ — replay path chosen (record → stream). Live accelerometer stays optional (3.4).
+- [x] **3.2** ~~Replay path~~ DONE: `replay/stream.py` streams CWRU windows over UART/TCP; board (`firmware/main.cpp run_replay`) classifies each. Binary framed protocol (`replay_protocol.h` ⇄ `protocol.py`), CRC-16. Verified vs `board_sim.py`: normal→`normal`, 100% window accuracy.
+- [x] **3.3** ~~Alert logic~~ DONE: fault-vs-normal + 60% confidence gate + debounce (3 fault / 5 normal, hysteresis) → LED + CAN-FD stub frame. Verified: fault injection latches ALERT in 3 frames (~129 ms), 0 false alarms, clears on return to normal.
 - [ ] **3.4** (live option) Accelerometer on small fan; coin on blade = imbalance; live detection
 - [ ] **3.5** (optional) Same model on Corstone-300 FVP (M55/Ethos-U) → extra comparison column
 - [ ] **3.6** Video storyline: hook 10s → problem 20s → demo 60s → results 40s → reusable artifacts 30s → close 10s
@@ -41,5 +41,5 @@ Each task has a "done when" check. Do them in order; one variable at a time in P
 - [ ] **4.2** README: pitch → results table → photo → quickstart → repro steps → harness reuse guide
 - [ ] **4.3** `download_data.py`: one-command dataset fetch + preprocess (never commit raw data)
 - [ ] **4.4** Clean-machine test of your own README; fix every snag (DevEx points live here)
-- [ ] **4.5** Arm Performix run where applicable
+- [x] **4.5** ~~Arm Performix~~ — resolved 2026-07-12: Performix targets Neoverse servers (Graviton/Cobalt/Axion), not applicable to bare-metal Cortex-M. README will state this + that DWT cycle counting is the M-profile equivalent.
 - [ ] **4.6
