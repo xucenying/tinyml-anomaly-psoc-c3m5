@@ -41,3 +41,11 @@ Thumbs.db
 # Local captures / scratch
 *.log
 capture*.txt
+
+# Standalone spin-off repo (published separately, don't nest in this repo)
+tflm-hello-world-psoc-c3/
+
+# Miscellaneous
+CLAUDE.md
+
+

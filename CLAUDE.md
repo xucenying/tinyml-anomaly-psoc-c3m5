@@ -2,6 +2,9 @@
 
 Read `00-research-and-plan.md` first for full context. This file is the quick-resume brief for any Claude session.
 
+## COMMUNICATION PREFERENCE (cenying)
+Explain everything as simply as possible: short sentences, plain words, everyday analogies. Assume non-expert. Avoid jargon; when a technical term is unavoidable, define it in one line. Prefer "here's the simple version" over dense/precise phrasing.
+
 ## Goal
 Win the Devpost "Arm Create: AI Optimization Challenge" (deadline **Aug 14, 2026, 4pm PDT**, submit by Aug 13).
 Secondary: make the user (cenying) an expert in Arm, embedded AI, and Claude workflows.
@@ -35,6 +38,8 @@ ModusToolbox (Infineon), arm-none-eabi-gcc, TFLite-Micro + CMSIS-NN/CMSIS-DSP, P
 Key repos: ARM-software/CMSIS-NN, ARM-software/CMSIS-DSP, tensorflow/tflite-micro, pytorch/executorch, Infineon/TARGET_KIT_PSC3M5_EVK.
 
 ## Status log (append entries here)
+- 2026-07-10 (hardware): **REPLAY RIG RUNS ON THE REAL C3M5.** stream.py over USB-UART (COM, 115200) → board classified live: 100% window accuracy, ALERT latched 3 frames after or_021 fault onset, CAN-FD stub frame emitted (`FA 09 63 01`), cleared on return to normal, 0 false alarms. Host-path banner-read bug fixed (skip pre-amble until RES). **Caught a regression:** the flashed project was left on the REFERENCE tflm tree from the int8_ref benchmark run → 180,7xx cyc (~753 us), not the CMSIS-NN rung. Restored `hello-world/tflite-micro` = cmsisnn tree (127 cmsis_nn kernels) + added `CMSIS_NN` to Makefile DEFINES (Makefile.bak saved). -O2/softfp already set. Rebuild clean + reflash → expect ~83,807 cyc / 349 us. NOTE: keep the project on the cmsisnn tree for the demo/video; only swap to ref/fp32 trees for benchmarking.
+- 2026-07-10: **PHASE 3 REPLAY RIG DONE (3.1–3.3).** Firmware `run_replay` in main.cpp: after the 10-vector self-test the board enters a streaming loop — reads binary frames over UART, quantizes, invokes, and runs a debounced alert state machine (fault≠normal & conf≥60%; latch after 3 faults, clear after 5 normals) → LED + CAN-FD stub. New `firmware/replay_protocol.h` (A5 5A | len | 128×f32 | CRC-16/CCITT). Host tooling in `replay/`: `protocol.py`, `stream.py` (scenario + fault injection + live dashboard, serial/TCP/--sim), `board_sim.py` (real INT8 tflite + identical alert FSM over TCP for no-hardware testing). Verified in sandbox: 100% window accuracy, ALERT latches 3 frames (~129 ms) after fault onset, 0 false alarms, clears on return to normal; CRC matches canonical 0x29B1. Sends float32 (not pre-quant int8) so on-device quantization == benchmark. Next: flash on real board (replace sim timing with DWT), then 3.4 live accel / 3.5 Corstone / 3.6 video.
 - 2026-07-09 (evening): **PHASE 2 CORE COMPLETE. Final -O2 column: fp32 140,246 / int8_ref 180,728 / int8_cmsisnn 83,807 cyc (349 us).** Headline findings: naive INT8 1.29x SLOWER than FP32+FPU; CMSIS-NN = 2.16x vs naive INT8, 1.67x vs FP32, 3x smaller model; 3.89x vs all-default config. benchmarks/results.md rewritten as definitive table. Next: Phase 3 demo (replay rig, alert logic), optional per-op profiling / Corstone.
 - 2026-07-09 (later): **fp32 row measured: 140,246 cyc / 584 us** (-O2, softfp/FPU, arena 1,712 B). KEY INSIGHT: FP32+FPU beats naive INT8 (326k) — INT8 only wins via CMSIS-NN. Pending for consistent -O2 column: re-run int8_cmsisnn under softfp (Run A) and int8_ref at -O2 (Run B, remove CMSIS_NN define with ref tree).
 - 2026-07-09: **-O2 rung: 84,374 cyc / 351 us** (-13% vs -Os/-Og). Total ladder 3.87x. CFLAGS+=-O2 CXXFLAGS+=-O2 in project Makefile (overrides Release -Os). Remaining: fp32_ref on-device row, per-op profiling, then Phase 3 demo.
