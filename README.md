@@ -93,7 +93,7 @@ from:
 - **Cycle-accurate benchmark harness** (`harness/`) — DWT counter C + Python
   results tooling, reusable on any Cortex-M.
 - **Replay + alert demo** (`replay/`) — streams recorded vibration to the board,
-  runs a debounced fault-alert state machine, emits a CAN-FD frame. Verified on the
+  runs a debounced fault-alert state machine (LED + UART alert). Verified on the
   real C3M5.
 
 ## Repository layout

@@ -90,7 +90,7 @@ def build_scenario(by_class, normal_n, fault_label, fault_n, tail_n, seed):
 def run(tr: Transport, plan, labels, fault_label):
     # No upfront banner read: a real board stays silent in read_frame until it
     # receives a frame (only the sim greets on connect). We stream first, then
-    # skip any pre-amble lines (boot self-test, banners, CANFD/ERR) until "RES".
+    # skip any pre-amble lines (boot self-test, banners, ERR/ALERT) until "RES".
     hdr = f"{'seq':>4} {'streamed':>9} {'pred':>9} {'conf':>5} {'cycles':>8}  state"
     print(hdr); print("-" * len(hdr))
 

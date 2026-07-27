@@ -64,18 +64,6 @@ static inline void led_set(bool on) {
 #endif
 }
 
-/* --- CAN-FD alert frame. Real TX is board-specific; stub prints the frame
- *     it would send so the pipeline is provable without a bus. Define
- *     CANFD_ENABLE + wire mtb_hal_canfd to send for real. --- */
-static void emit_canfd_alert(int fault_id, int conf_pct) {
-    uint8_t d[4] = {0xFA, (uint8_t)fault_id, (uint8_t)conf_pct, 0x01};
-    printf("CANFD id=0x7DF dlc=4 data=%02X %02X %02X %02X\r\n",
-           d[0], d[1], d[2], d[3]);
-#if defined(CANFD_ENABLE)
-    /* TODO: mtb_hal_canfd_transmit(&canfd_obj, &frame); */
-#endif
-}
-
 /* --- blocking single-byte UART read (shares the retarget-io SCB) --- */
 static inline uint8_t uart_get_byte(void) {
     uint32_t b;
@@ -158,7 +146,7 @@ static void run_replay(tflite::MicroInterpreter &interpreter,
         if ( alert && normal_run >= kDebounceClear) alert = false;
         if (alert != prev) {
             led_set(alert);
-            if (alert) emit_canfd_alert(best, conf_pct);
+            if (alert) printf("*** ALERT: %s (%d%%) ***\r\n", kClassLabels[best], conf_pct);
         }
 
         printf("RES %lu %d %-7s %3d%% %lu %s\r\n",
@@ -256,7 +244,7 @@ int main(void)
     printf("=== classifier test complete ===\r\n");
 
     /* Hand off to continuous replay: PC streams feature windows, board
-     * classifies each and raises a debounced fault alert (LED + CAN-FD). */
+     * classifies each and raises a debounced fault alert (LED + UART). */
     run_replay(interpreter, in, out, in_scale, in_zp, out_scale, out_zp);
     return 0;   /* unreachable */
 }

@@ -2,14 +2,14 @@
 
 Phase 3.2 + 3.3 of the challenge build. A PC streams recorded CWRU vibration
 feature windows to the Cortex-M33 over UART; the board classifies each window
-and raises a **debounced fault alert** (LED + CAN-FD frame). The same host tool
+and raises a **debounced fault alert** (LED + UART alert line). The same host tool
 runs against a **software board simulator**, so the whole pipeline — framing,
 quantization, inference, alert logic — is testable with no hardware attached.
 
 ```
 features.npz ──frames──►  UART/TCP  ──►  C3M5 (or board_sim)
   stream.py                                 quantize → INT8 CMSIS-NN infer
-  (fault injection)  ◄──ASCII status──      debounced alert → LED + CAN-FD
+  (fault injection)  ◄──ASCII status──      debounced alert → LED + UART
 ```
 
 ## Quick start (no hardware)
@@ -52,8 +52,8 @@ python stream.py --sim --interval 0.043      # pace at real-time window cadence
 python stream.py --serial COM5        # or --serial /dev/ttyACM0
 ```
 
-The board's LED lights while an alert is latched; if you enable CAN-FD
-(`-DCANFD_ENABLE`) it also emits an alert frame.
+The board's LED lights while an alert is latched, and it prints a
+`*** ALERT: <class> (<conf>%) ***` line over UART.
 
 ## Wire protocol
 
