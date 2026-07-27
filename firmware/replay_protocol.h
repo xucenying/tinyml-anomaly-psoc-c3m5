@@ -1,18 +1,21 @@
 /*
- * replay_protocol.h — PC<->C3M5 feature-streaming wire format (shared).
+ * replay_protocol.h — PC<->C3M5 raw-window streaming wire format (shared).
  *
- * Host -> board: a binary frame carrying one 128-float feature window.
+ * Host -> board: a binary frame carrying ONE raw 1024-sample vibration window
+ * (what a sensor+ADC would hand you). The board runs the FULL on-chip pipeline
+ * on it: Hann + FFT feature extraction (features.h) -> INT8 quantize -> classify.
  *   byte 0      : SYNC0  0xA5
  *   byte 1      : SYNC1  0x5A
- *   byte 2..3   : payload length in bytes, little-endian (== 512)
- *   byte 4..    : payload = 128 x float32, little-endian (the feature vector)
+ *   byte 2..3   : payload length in bytes, little-endian (== 4096)
+ *   byte 4..    : payload = 1024 x float32 raw samples, little-endian
  *   last 2 bytes: CRC-16/CCITT-FALSE over the payload bytes, little-endian
  *
  * Board -> host: one ASCII status line per processed frame (see main.cpp):
- *   "RES <seq> <pred> <label> <conf%> <cycles> <ok|ALERT>\r\n"
+ *   "RES <seq> <pred> <label> <conf%> <fft_cyc> <inf_cyc> <ok|ALERT>\r\n"
  *
- * Float32 (not pre-quantized int8) is sent so the board performs the same
- * quantization as the on-device benchmark — inference numbers stay comparable.
+ * Raw float32 samples are sent (not features, not pre-quantized int8) so the
+ * board performs the SAME FFT + quantization as the on-device benchmark — the
+ * demo emulates a real sensor and exercises the whole optimized pipeline.
  * Apache-2.0.
  */
 #pragma once
@@ -20,8 +23,8 @@
 
 #define RPL_SYNC0        0xA5u
 #define RPL_SYNC1        0x5Au
-#define RPL_FEATURE_DIM  128
-#define RPL_PAYLOAD_LEN  (RPL_FEATURE_DIM * 4)   /* 512 bytes */
+#define RPL_RAW_DIM      1024                     /* raw samples per window */
+#define RPL_PAYLOAD_LEN  (RPL_RAW_DIM * 4)        /* 4096 bytes */
 
 /* CRC-16/CCITT-FALSE: poly 0x1021, init 0xFFFF, no reflection. */
 static inline uint16_t rpl_crc16(const uint8_t *p, uint32_t n)

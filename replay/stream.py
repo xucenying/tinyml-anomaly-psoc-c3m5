@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""stream.py — PC host for the replay rig. Streams recorded CWRU feature windows
-to the C3M5 (or the board simulator), injects a fault mid-run, and shows a live
-detection dashboard.
+"""stream.py — PC host for the replay rig. Streams RAW held-out CWRU vibration
+windows (1024 samples each) to the C3M5 (or the board simulator), which runs the
+full on-chip pipeline (FFT features + INT8 classify). Injects a fault mid-run and
+shows a live detection dashboard.
 
 Transports:
     --serial COM5           real board over USB-UART (needs pyserial)
@@ -68,8 +69,13 @@ class SerialTransport(Transport):
 
 # ---------- data ----------
 def load_windows():
-    d = np.load(ROOT.parent / "ml/data/features.npz")
-    X, y = d["X"].astype(np.float32), d["y"]
+    """Load RAW 1024-sample held-out windows (what a sensor produces). The board
+    runs the FFT + classify itself, so we stream raw samples, not features."""
+    p = ROOT.parent / "ml/data/raw_windows.npz"
+    if not p.exists():
+        sys.exit("missing ml/data/raw_windows.npz — run: python ml/export_raw_windows.py")
+    d = np.load(p)
+    X, y = d["X_raw"].astype(np.float32), d["y"]
     labels = json.loads((ROOT.parent / "ml/data/classes.json").read_text())
     by_class = {lab: X[y == i] for i, lab in enumerate(labels)}
     return labels, by_class
@@ -91,7 +97,8 @@ def run(tr: Transport, plan, labels, fault_label):
     # No upfront banner read: a real board stays silent in read_frame until it
     # receives a frame (only the sim greets on connect). We stream first, then
     # skip any pre-amble lines (boot self-test, banners, ERR/ALERT) until "RES".
-    hdr = f"{'seq':>4} {'streamed':>9} {'pred':>9} {'conf':>5} {'cycles':>8}  state"
+    hdr = (f"{'seq':>4} {'streamed':>9} {'pred':>9} {'conf':>5} "
+           f"{'fft_cyc':>8} {'inf_cyc':>8}  state")
     print(hdr); print("-" * len(hdr))
 
     fault_onset = next(i for i, (lab, _) in enumerate(plan) if lab != "normal")
@@ -99,9 +106,9 @@ def run(tr: Transport, plan, labels, fault_label):
     correct = 0
     false_alerts = 0
 
-    for i, (true_lab, feat) in enumerate(plan):
-        tr.write(pack_frame(feat))
-        # RES <seq> <pred_idx> <label> <conf%> <cycles> <ok|ALERT>
+    for i, (true_lab, window) in enumerate(plan):
+        tr.write(pack_frame(window))
+        # RES <seq> <pred_idx> <label> <conf%> <fft_cyc> <inf_cyc> <ok|ALERT>
         parts = tr.readline().split()
         while not parts or parts[0] != "RES":
             if parts:                      # surface board pre-amble / diagnostics
@@ -109,8 +116,9 @@ def run(tr: Transport, plan, labels, fault_label):
             parts = tr.readline().split()
         pred_lab = parts[3]
         conf = parts[4]
-        cycles = int(parts[5])
-        state = parts[6]
+        fft_cyc = int(parts[5])
+        inf_cyc = int(parts[6])
+        state = parts[7]
         correct += (pred_lab == true_lab)
         if state == "ALERT":
             if alert_at is None and i >= fault_onset:
@@ -119,7 +127,8 @@ def run(tr: Transport, plan, labels, fault_label):
                 false_alerts += 1
         flag = "  <== ALERT" if state == "ALERT" else ""
         marker = " (fault injected)" if i == fault_onset else ""
-        print(f"{i:>4} {true_lab:>9} {pred_lab:>9} {conf:>5} {cycles:>8}  {state}{flag}{marker}")
+        print(f"{i:>4} {true_lab:>9} {pred_lab:>9} {conf:>5} "
+              f"{fft_cyc:>8} {inf_cyc:>8}  {state}{flag}{marker}")
 
     print("-" * len(hdr))
     total = len(plan)
@@ -164,9 +173,9 @@ def main():
         if a.sim:
             proc = subprocess.Popen(
                 [sys.executable, str(ROOT / "board_sim.py"), "--port", str(a.sim_port)],
-                stderr=subprocess.PIPE, text=True)
-            # wait for the sim to start listening
-            for _ in range(50):
+                stderr=subprocess.DEVNULL, text=True)
+            # wait for the sim to start listening (model load can take a few s)
+            for _ in range(150):
                 try:
                     tr = TcpTransport("127.0.0.1", a.sim_port); break
                 except OSError:

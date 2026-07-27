@@ -2,17 +2,21 @@
 """protocol.py — PC<->C3M5 replay wire format (mirror of firmware/replay_protocol.h).
 
 Host -> board frame:
-    A5 5A  LEN_L LEN_H  <512 bytes = 128 float32 LE>  CRC_L CRC_H
-    CRC = CRC-16/CCITT-FALSE over the 512 payload bytes.
-Board -> host: ASCII lines "RES <seq> <pred> <label> <conf%> <cycles> <ok|ALERT>".
+    A5 5A  LEN_L LEN_H  <4096 bytes = 1024 float32 LE raw samples>  CRC_L CRC_H
+    CRC = CRC-16/CCITT-FALSE over the 4096 payload bytes.
+Board -> host: ASCII lines
+    "RES <seq> <pred> <label> <conf%> <fft_cyc> <inf_cyc> <ok|ALERT>".
+
+The host sends ONE raw 1024-sample vibration window per frame (what a sensor
+hands you). The board runs the whole pipeline: FFT features -> INT8 -> classify.
 
 Apache-2.0."""
 from __future__ import annotations
 import struct
 
 SYNC0, SYNC1 = 0xA5, 0x5A
-FEATURE_DIM = 128
-PAYLOAD_LEN = FEATURE_DIM * 4  # 512
+RAW_DIM = 1024
+PAYLOAD_LEN = RAW_DIM * 4  # 4096
 
 
 def crc16(data: bytes) -> int:
@@ -25,11 +29,11 @@ def crc16(data: bytes) -> int:
     return crc
 
 
-def pack_frame(feat) -> bytes:
-    """feat: iterable of 128 floats -> framed bytes ready for the wire."""
-    payload = struct.pack("<128f", *feat)
+def pack_frame(window) -> bytes:
+    """window: iterable of 1024 raw float samples -> framed bytes for the wire."""
+    payload = struct.pack("<%df" % RAW_DIM, *window)
     if len(payload) != PAYLOAD_LEN:
-        raise ValueError(f"expected {FEATURE_DIM} floats")
+        raise ValueError(f"expected {RAW_DIM} floats")
     return bytes([SYNC0, SYNC1]) + struct.pack("<H", PAYLOAD_LEN) + payload \
         + struct.pack("<H", crc16(payload))
 
@@ -47,7 +51,7 @@ def read_exact(readfn, n: int) -> bytes:
 
 def read_frame(readfn):
     """Read one frame from a blocking read(n) callable.
-    Returns (feats: list[float] | None, crc_ok: bool). feats is None on desync."""
+    Returns (window: list[float] | None, crc_ok: bool). window is None on desync."""
     # hunt for SYNC0 SYNC1
     while True:
         if read_exact(readfn, 1)[0] != SYNC0:
@@ -60,4 +64,4 @@ def read_frame(readfn):
     payload = read_exact(readfn, PAYLOAD_LEN)
     (crc,) = struct.unpack("<H", read_exact(readfn, 2))
     ok = crc == crc16(payload)
-    return list(struct.unpack("<128f", payload)), ok
+    return list(struct.unpack("<%df" % RAW_DIM, payload)), ok

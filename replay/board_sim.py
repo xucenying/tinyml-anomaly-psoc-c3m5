@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """board_sim.py — host stand-in for the C3M5, for testing the replay rig with
-no hardware attached. Runs the SAME int8 TFLite model with the SAME quantization
-and the SAME debounced alert state machine as firmware/main.cpp, and speaks the
-binary framing protocol over a TCP socket.
+no hardware attached. Receives RAW 1024-sample windows and runs the SAME full
+pipeline as firmware/main.cpp: Hann + FFT features (mirrors features.h /
+preprocess.py) -> INT8 quantize -> invoke -> debounced alert state machine.
+Speaks the binary framing protocol over a TCP socket.
 
-Reported cycle counts are the on-device int8_cmsisnn measurement (benchmarks/
-results.md) with light jitter, clearly a simulation — replace with a real board
-for true numbers.
+Reported cycle counts are the on-device measurements (benchmarks/results.md:
+CMSIS-DSP FFT + int8_cmsisnn inference) with light jitter, clearly a simulation
+— replace with a real board for true numbers.
 
 Usage:  python board_sim.py [--port 9000] [--model ../ml/model_int8.tflite]
 Apache-2.0."""
@@ -27,11 +28,25 @@ NORMAL_CLASS = 6            # "normal" — must match firmware kNormalClass
 CONF_THRESH = 60           # kConfThreshPct
 DEBOUNCE_FAULT = 3         # kDebounceFault
 DEBOUNCE_CLEAR = 5         # kDebounceClear
-SIM_CYCLES = 83807         # measured int8_cmsisnn avg (benchmarks/results.md)
+SIM_FFT_CYCLES = 109210    # measured CMSIS-DSP FFT avg (benchmarks/results.md)
+SIM_INF_CYCLES = 83807     # measured int8_cmsisnn inference avg
+
+
+# --- feature extraction: mirrors ml/preprocess.py + firmware/features.h ---
+_WIN, _NBINS = 1024, 128
+_HANN = np.hanning(_WIN).astype(np.float32)
+
+
+def extract_features(window, mean, std):
+    """raw 1024 samples -> 128 standardized features (== on-board fe_extract)."""
+    x = np.asarray(window, dtype=np.float32) * _HANN
+    mag = np.abs(np.fft.rfft(x))[1:513]              # drop DC -> 512 bins
+    pooled = mag.reshape(_NBINS, 4).mean(axis=1)     # 512 -> 128
+    return ((np.log1p(pooled) - mean) / std).astype(np.float32)
 
 
 class Board:
-    """Mirrors firmware: quantize -> invoke -> debounced alert state machine."""
+    """Mirrors firmware: FFT features -> quantize -> invoke -> alert FSM."""
     def __init__(self, model_path: Path):
         self.it = tflite.Interpreter(model_path=str(model_path))
         self.it.allocate_tensors()
@@ -41,14 +56,15 @@ class Board:
         self.out_s, self.out_zp = self.out["quantization"]
         labels = json.loads((ROOT.parent / "ml/data/classes.json").read_text())
         self.labels = labels
+        norm = json.loads((ROOT.parent / "ml/data/norm.json").read_text())
+        self.mean, self.std = float(norm["mean"]), float(norm["std"])
         self.seq = 0
         self.fault_run = self.normal_run = 0
         self.alert = False
         self.rng = np.random.default_rng(0)
 
     def infer(self, feat):
-        x = np.array(feat, dtype=np.float32)
-        q = np.clip(np.round(x / self.in_s + self.in_zp), -128, 127).astype(np.int8)
+        q = np.clip(np.round(feat / self.in_s + self.in_zp), -128, 127).astype(np.int8)
         self.it.set_tensor(self.inp["index"], q[None, :])
         self.it.invoke()
         raw = self.it.get_tensor(self.out["index"])[0].astype(np.int32)
@@ -56,7 +72,8 @@ class Board:
         conf = int((raw[best] - self.out_zp) * self.out_s * 100)
         return best, conf
 
-    def step(self, feat) -> str:
+    def step(self, window) -> str:
+        feat = extract_features(window, self.mean, self.std)   # on-board FFT
         best, conf = self.infer(feat)
         is_fault = best != NORMAL_CLASS and conf >= CONF_THRESH
         if is_fault:
@@ -67,9 +84,10 @@ class Board:
             self.alert = True
         if self.alert and self.normal_run >= DEBOUNCE_CLEAR:
             self.alert = False
-        cyc = SIM_CYCLES + int(self.rng.integers(-400, 400))
+        fft_cyc = SIM_FFT_CYCLES + int(self.rng.integers(-500, 500))
+        inf_cyc = SIM_INF_CYCLES + int(self.rng.integers(-400, 400))
         line = (f"RES {self.seq} {best} {self.labels[best]:<7} {conf:3d}% "
-                f"{cyc} {'ALERT' if self.alert else 'ok'}\r\n")
+                f"{fft_cyc} {inf_cyc} {'ALERT' if self.alert else 'ok'}\r\n")
         self.seq += 1
         return line
 
@@ -84,16 +102,16 @@ def serve(port: int, model_path: Path):
           file=sys.stderr, flush=True)
     conn, addr = srv.accept()
     print(f"[board_sim] host connected from {addr}", file=sys.stderr, flush=True)
-    conn.sendall(b"=== board_sim ready (int8_cmsisnn) ===\r\n")
+    conn.sendall(b"=== board_sim ready (CMSIS-DSP FFT + int8_cmsisnn) ===\r\n")
     readfn = lambda n: conn.recv(n)
     try:
         while True:
-            feats, ok = read_frame(readfn)
-            if feats is None:
+            window, ok = read_frame(readfn)
+            if window is None:
                 conn.sendall(b"ERR desync\r\n"); continue
             if not ok:
                 conn.sendall(b"ERR crc\r\n"); continue
-            conn.sendall(board.step(feats).encode())
+            conn.sendall(board.step(window).encode())
     except (EOFError, ConnectionError):
         print("[board_sim] host disconnected", file=sys.stderr, flush=True)
     finally:

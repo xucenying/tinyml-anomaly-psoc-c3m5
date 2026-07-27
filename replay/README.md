@@ -1,38 +1,51 @@
-# Replay rig — stream recorded faults, detect on-device
+# Replay rig — stream raw sensor windows, full pipeline on-device
 
-Phase 3.2 + 3.3 of the challenge build. A PC streams recorded CWRU vibration
-feature windows to the Cortex-M33 over UART; the board classifies each window
-and raises a **debounced fault alert** (LED + UART alert line). The same host tool
-runs against a **software board simulator**, so the whole pipeline — framing,
-quantization, inference, alert logic — is testable with no hardware attached.
+Phase 3.2 + 3.3 of the challenge build. A PC streams **raw 1024-sample vibration
+windows** (held-out load 3 — data the model never trained on) to the Cortex-M33
+over UART. The board runs the **entire pipeline itself** — Hann + FFT feature
+extraction, INT8 quantize, CMSIS-NN classify — then raises a **debounced fault
+alert** (LED + UART alert line). The same host tool runs against a **software
+board simulator**, so the whole pipeline — framing, FFT, inference, alert logic —
+is testable with no hardware attached.
 
 ```
-features.npz ──frames──►  UART/TCP  ──►  C3M5 (or board_sim)
-  stream.py                                 quantize → INT8 CMSIS-NN infer
-  (fault injection)  ◄──ASCII status──      debounced alert → LED + UART
+raw_windows.npz ─raw 1024-sample frames─►  UART/TCP  ──►  C3M5 (or board_sim)
+  stream.py                                   on-board FFT → INT8 CMSIS-NN infer
+  (fault injection)   ◄──ASCII status──       debounced alert → LED + UART
 ```
+
+Streaming raw samples (not pre-computed features) means the demo emulates a real
+sensor and exercises the on-board FFT — the 3.1× CMSIS-DSP rung runs live, not
+just in a self-test.
 
 ## Quick start (no hardware)
 
 ```bash
+# one-time: export the raw held-out windows the demo streams
+python ml/export_raw_windows.py            # writes ml/data/raw_windows.npz
+
 cd replay
 python -m venv .venv && . .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install "numpy<2" tflite-runtime               # + pyserial for a real board
+pip install "numpy<2" tflite-runtime scipy         # + pyserial for a real board
 python stream.py --sim
 ```
 
 You should see healthy windows classified as `normal`, a fault injected mid-run,
-and the board latch `ALERT` a few frames later, then clear once the fault stops:
+and the board latch `ALERT` a few frames later, then clear once the fault stops.
+Each line reports the on-board FFT and inference cycle counts separately:
 
 ```
- seq  streamed      pred  conf   cycles  state
-   5    normal    normal   99%    83439  ok
-   6    or_021    or_021   99%    83467  ok (fault injected)
-   8    or_021    or_021   99%    83547  ALERT  <== ALERT
+ seq  streamed      pred  conf  fft_cyc  inf_cyc  state
+   5    normal    normal   99%   109359    84137  ok
+   6    or_021    or_021   99%   109213    83892  ok (fault injected)
+   8    or_021    or_021   99%   109342    83841  ALERT  <== ALERT
    ...
 fault injected at frame 6 (or_021); ALERT at frame 8  ->  detection latency 3 frames (~129 ms of signal)
 false alerts during healthy stretch: 0
 ```
+
+A no-sockets in-process check of the whole chain (protocol roundtrip + FFT +
+classify + alert) is in `test_e2e.py`: `python test_e2e.py`.
 
 Try other faults / timings:
 
@@ -57,28 +70,28 @@ The board's LED lights while an alert is latched, and it prints a
 
 ## Wire protocol
 
-Host → board, one binary frame per feature window (`protocol.py` ⇄
+Host → board, one binary frame per **raw window** (`protocol.py` ⇄
 `firmware/replay_protocol.h`, kept byte-for-byte identical):
 
 | bytes | field |
 |---|---|
 | `A5 5A` | sync |
-| 2 | payload length, little-endian (= 512) |
-| 512 | payload: 128 × `float32`, little-endian |
+| 2 | payload length, little-endian (= 4096) |
+| 4096 | payload: 1024 × `float32` raw samples, little-endian |
 | 2 | CRC-16/CCITT-FALSE over the payload, little-endian |
 
-Board → host, one ASCII line per frame:
+Board → host, one ASCII line per frame (FFT and inference cycles reported
+separately):
 
 ```
-RES <seq> <pred_idx> <label> <conf%> <cycles> <ok|ALERT>
+RES <seq> <pred_idx> <label> <conf%> <fft_cyc> <inf_cyc> <ok|ALERT>
 ```
 
-Design notes: **float32** is sent (not pre-quantized int8) so the board runs the
-exact same quantization as the on-device benchmark — inference numbers stay
-comparable and no work is moved off-device. 512 B/frame at 115200 baud ≈ 44 ms,
-which matches the real CWRU window cadence (hop 512 @ ~12 kHz ≈ 43 ms), so it
-streams at real-time. CRC-16 guards against UART noise; a bad frame is reported
-(`ERR crc`) and the stream continues.
+Design notes: **raw float32 samples** are sent (not features, not pre-quantized
+int8) so the board runs the whole pipeline — FFT feature extraction *and*
+quantization — exactly as it would from a live sensor; nothing is moved
+off-device. CRC-16 guards against UART noise; a bad frame is reported (`ERR crc`)
+and the stream continues.
 
 ## Alert logic (firmware `run_replay`, mirrored in `board_sim.py`)
 

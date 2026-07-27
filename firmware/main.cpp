@@ -71,10 +71,10 @@ static inline uint8_t uart_get_byte(void) {
     return (uint8_t)b;
 }
 
-/* Read one protocol frame into feat[128]. Returns true on a CRC-valid frame,
+/* Read one protocol frame into raw_win[1024]. Returns true on a CRC-valid frame,
  * false on a CRC mismatch (caller reports and keeps streaming). Blocks until a
  * well-formed SYNC/len header arrives, so a stalled host just pauses the loop. */
-static bool read_frame(float *feat) {
+static bool read_frame(float *raw_win) {
     /* hunt for SYNC0 SYNC1 */
     for (;;) {
         if (uart_get_byte() != RPL_SYNC0) continue;
@@ -84,7 +84,7 @@ static bool read_frame(float *feat) {
     len |= (uint16_t)uart_get_byte() << 8;
     if (len != RPL_PAYLOAD_LEN) return false;   /* desync; resync on next call */
 
-    uint8_t *raw = (uint8_t *)feat;             /* 512 bytes, LE float32 in place */
+    uint8_t *raw = (uint8_t *)raw_win;          /* 4096 bytes, LE float32 in place */
     for (uint16_t i = 0; i < RPL_PAYLOAD_LEN; ++i) raw[i] = uart_get_byte();
 
     uint16_t crc = (uint16_t)uart_get_byte();
@@ -92,38 +92,46 @@ static bool read_frame(float *feat) {
     return crc == rpl_crc16(raw, RPL_PAYLOAD_LEN);
 }
 
-/* Continuous replay: read frame -> quantize -> invoke -> alert state machine.
- * Never returns. Alert latches after kDebounceFault consecutive confident
- * faults and clears after kDebounceClear consecutive normals (hysteresis kills
- * single-frame blips). */
+/* Continuous replay: read RAW window -> on-board FFT features -> quantize ->
+ * invoke -> alert state machine. This is the full sensor-to-alert pipeline on
+ * the chip. Never returns. Alert latches after kDebounceFault consecutive
+ * confident faults and clears after kDebounceClear consecutive normals. */
 static void run_replay(tflite::MicroInterpreter &interpreter,
                        TfLiteTensor *in, TfLiteTensor *out,
                        float in_scale, int in_zp,
                        float out_scale, int out_zp) {
-    static float feat[RPL_FEATURE_DIM];
+    static float raw_win[RPL_RAW_DIM];    /* 1024 raw samples (the "measurement") */
+    static float feat[FE_NBINS];          /* 128 FFT features                     */
     uint32_t seq = 0;
     int fault_run = 0, normal_run = 0;
     bool alert = false;
 
-    printf("\r\n=== replay mode: streaming frames (115200 8N1) ===\r\n");
+    fe_init();   /* Hann table + FFT instance once */
+
+    printf("\r\n=== replay mode: raw windows -> on-board FFT -> classify (115200 8N1) ===\r\n");
     led_set(false);
 
     for (;;) {
-        if (!read_frame(feat)) { printf("ERR crc\r\n"); continue; }
+        if (!read_frame(raw_win)) { printf("ERR crc\r\n"); continue; }
+
+        /* raw window -> 128 features (on-board FFT, timed) */
+        uint32_t f0 = dwt_now();
+        fe_extract(raw_win, feat);
+        uint32_t fft_dt = dwt_now() - f0;
 
         if (in->type == kTfLiteInt8) {
-            for (int i = 0; i < RPL_FEATURE_DIM; ++i) {
+            for (int i = 0; i < FE_NBINS; ++i) {
                 float q = feat[i] / in_scale + (float)in_zp;
                 if (q > 127.0f) q = 127.0f; else if (q < -128.0f) q = -128.0f;
                 in->data.int8[i] = (int8_t)q;
             }
         } else {
-            for (int i = 0; i < RPL_FEATURE_DIM; ++i) in->data.f[i] = feat[i];
+            for (int i = 0; i < FE_NBINS; ++i) in->data.f[i] = feat[i];
         }
 
         uint32_t t0 = dwt_now();
         if (interpreter.Invoke() != kTfLiteOk) halt("Invoke failed");
-        uint32_t dt = dwt_now() - t0;
+        uint32_t inf_dt = dwt_now() - t0;
 
         int best = 0;
         if (out->type == kTfLiteInt8) {
@@ -149,9 +157,10 @@ static void run_replay(tflite::MicroInterpreter &interpreter,
             if (alert) printf("*** ALERT: %s (%d%%) ***\r\n", kClassLabels[best], conf_pct);
         }
 
-        printf("RES %lu %d %-7s %3d%% %lu %s\r\n",
+        printf("RES %lu %d %-7s %3d%% %lu %lu %s\r\n",
                (unsigned long)seq++, best, kClassLabels[best], conf_pct,
-               (unsigned long)dt, alert ? "ALERT" : "ok");
+               (unsigned long)fft_dt, (unsigned long)inf_dt,
+               alert ? "ALERT" : "ok");
     }
 }
 
