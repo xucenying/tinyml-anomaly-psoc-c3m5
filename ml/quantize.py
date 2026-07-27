@@ -13,6 +13,9 @@ from pathlib import Path
 ROOT = Path(__file__).parent
 d = np.load(ROOT / "data" / "features.npz")
 X, y = d["X"], d["y"]
+# apply the SAME train-only normalization used in train.py (no leakage)
+norm = json.loads((ROOT / "data" / "norm.json").read_text())
+X = (X - norm["mean"]) / norm["std"]
 sp = np.load(ROOT / "data" / "val_split.npz")
 vi, ti = sp["vi"], sp["ti"]
 model = tf.keras.models.load_model(ROOT / "model_fp32.keras")

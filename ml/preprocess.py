@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """CWRU preprocessing: raw vibration -> FFT feature vectors an MCU can replicate.
 
-Pipeline per window (mirrors planned on-device CMSIS-DSP chain):
-  1024-sample window (hop 512) -> hann -> rfft -> |mag| of bins 1..512
-  -> average-pool x4 -> 128 log1p features -> global standardize.
+Per window (mirrors planned on-device CMSIS-DSP chain):
+  1024-sample window (hop 512) -> hann -> rfft -> |mag| bins 1..512
+  -> average-pool x4 -> 128 log1p features.
 
-Outputs: data/features.npz (X float32 [N,128], y int64 [N]), data/norm.json
-(mean/std for firmware), data/classes.json.
+Each window is tagged with its class AND its motor load (group), so training
+can hold out a whole load with no leakage. Normalization (mean/std) is computed
+LATER, in train.py, from training windows only — computing it here over all
+data would leak test statistics.
+
+Outputs: data/features.npz (X [N,128] float32, y [N], load [N]), data/classes.json.
 Usage: python preprocess.py    Apache-2.0."""
 import json
 import numpy as np
@@ -18,7 +22,6 @@ ROOT = Path(__file__).parent
 OUT = ROOT / "data"
 
 def de_signal(mat_path):
-    """Extract drive-end accelerometer time series from a CWRU .mat file."""
     md = sio.loadmat(mat_path)
     keys = [k for k in md if k.endswith("_DE_time")]
     if not keys:
@@ -33,26 +36,31 @@ def featurize(sig):
     pooled = mag.reshape(n, NBINS, 4).mean(axis=2)              # 512 -> 128
     return np.log1p(pooled).astype(np.float32)
 
+def parse_name(stem):
+    # e.g. "ir_007_load1_106" -> class "ir_007", load 1
+    parts = stem.split("_")
+    load = int([p for p in parts if p.startswith("load")][0][4:])
+    cls = "_".join(parts[:-2])  # drop loadN and filenum
+    return cls, load
+
 def main():
     mats = sorted((OUT / "cwru").glob("*.mat"))
     assert mats, "run download_data.py first"
-    classes = sorted({m.stem.rsplit("_", 1)[0] for m in mats})
-    Xs, ys = [], []
+    classes = sorted({parse_name(m.stem)[0] for m in mats})
+    Xs, ys, loads = [], [], []
     for m in mats:
-        cls = m.stem.rsplit("_", 1)[0]
+        cls, load = parse_name(m.stem)
         f = featurize(de_signal(m))
         Xs.append(f)
         ys.append(np.full(len(f), classes.index(cls)))
-        print(f"{m.name}: {len(f)} windows -> class '{cls}'")
-    X, y = np.concatenate(Xs), np.concatenate(ys)
-    mean, std = X.mean(), X.std()               # global (scalar) norm: trivial on MCU
-    X = (X - mean) / std
-    np.savez_compressed(OUT / "features.npz", X=X, y=y)
-    (OUT / "norm.json").write_text(json.dumps({"mean": float(mean), "std": float(std),
-                                               "win": WIN, "hop": HOP, "nbins": NBINS}))
+        loads.append(np.full(len(f), load))
+        print(f"{m.name}: {len(f)} windows -> class '{cls}', load {load}")
+    X = np.concatenate(Xs)
+    y = np.concatenate(ys)
+    load = np.concatenate(loads)
+    np.savez_compressed(OUT / "features.npz", X=X, y=y, load=load)
     (OUT / "classes.json").write_text(json.dumps(classes))
-    print(f"\nX {X.shape}, y {y.shape}, {len(classes)} classes: {classes}")
-    print(f"norm: mean={mean:.4f} std={std:.4f}  (saved for firmware)")
+    print(f"\nX {X.shape}, y {y.shape}, {len(classes)} classes, loads {sorted(set(load))}")
 
 if __name__ == "__main__":
     main()
