@@ -18,6 +18,7 @@
 /* Pick ONE: model_data.h (INT8, 24 KB) or model_data_fp32.h (FP32, 72 KB) */
 #include "model_data.h"
 #include "test_vectors.h"      /* 10 validation feature vectors */
+#include "fft_selftest.h"      /* on-board FFT feature extraction test */
 #include "replay_protocol.h"   /* PC<->board streaming wire format */
 
 #include <cstring>
@@ -203,6 +204,9 @@ int main(void)
     const int   in_zp     = in->params.zero_point;
     const float out_scale = out->params.scale;
     const int   out_zp    = out->params.zero_point;
+
+    /* on-board FFT feature extraction test (raw window -> FFT -> classify) */
+    fft_selftest(interpreter, in, out);
 
     int correct = 0;
     uint64_t total_cycles = 0;

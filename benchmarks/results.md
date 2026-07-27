@@ -33,3 +33,41 @@ Debug/-Og historical rows and capture workflow: see git history of this file and
 - flags: `CFLAGS+=-O2 CXXFLAGS+=-O2`, `VFP_SELECT=softfp`
 
 TODO (stretch): per-op profiling; Corstone-300 (M55/Ethos-U55) column; ExecuTorch attempt.
+
+## Phase 3b: on-board feature extraction (FFT)
+
+Full pipeline now on-device: raw 1024-sample window -> FFT features -> classify.
+Held-out load 3, 9/10 correct (b_021 confused with b_014 — same in both the FFT
+pipeline and the embedded-vector test, so the FFT is correct; it's a real model
+limit on the held-out load).
+
+| stage | avg cycles | latency |
+|---|---|---|
+| feature extraction (plain-C FFT) | 338,114 | 1,408 µs |
+| inference (INT8 + CMSIS-NN, -O2) | 86,067 | 358 µs |
+| **full pipeline (plain-C FFT)** | **~424,000** | **~1,766 µs** |
+
+Finding: after CMSIS-NN sped up inference, the **FFT became the bottleneck**
+(4x the inference cost) — the classic "bottleneck shifts" result. Next rung:
+CMSIS-DSP FFT (-DFE_USE_CMSIS) vs this plain-C FFT.
+
+## Phase 3b (cont.): CMSIS-DSP FFT rung
+
+Same on-board pipeline, only the FFT implementation changed (plain-C radix-2
+rFFT -> CMSIS-DSP arm_rfft_fast_f32). Same 9/10, same b_021->b_014 miss.
+
+| FFT implementation | avg cycles | latency | speedup |
+|---|---|---|---|
+| plain-C radix-2 | 338,114 | 1,408 µs | 1.0x |
+| **CMSIS-DSP arm_rfft_fast_f32** | **109,210** | **455 µs** | **3.1x** |
+
+Full on-device pipeline (raw window -> features -> classify):
+
+| pipeline | FFT | inference | total | speedup |
+|---|---|---|---|---|
+| plain-C FFT + CMSIS-NN | 1,408 µs | 358 µs | ~1,766 µs | 1.0x |
+| **CMSIS-DSP FFT + CMSIS-NN** | 455 µs | 356 µs | **~811 µs** | **2.2x** |
+
+CMSIS-DSP vendored minimally into the project (8 FFT source files + 3 tables:
+TWIDDLECOEF_F32_512, BITREVIDX_FLT_512, TWIDDLECOEF_RFFT_F32_1024) to fit flash.
+Bottleneck now balanced (FFT 56% / inference 44%) vs plain-C (FFT 80%).
