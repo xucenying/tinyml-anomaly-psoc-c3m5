@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Train the CWRU fault MLP with a leakage-free leave-one-load-out split.
+"""Train the CWRU fault MLP on the per-file 70/30 temporal split.
 
-Train on motor loads {0,1,2}, test on held-out load {3}. Train and test share
-no recording and no operating condition, so validation accuracy reflects real
-generalization. Normalization is fit on TRAIN windows only.
+Split comes from preprocess.py (split: 0=train, 1=test). First 70% of every
+recording trains, last 30% tests, straddling windows dropped -> no train window
+shares a raw sample with any test window. Normalization is fit on TRAIN only.
 
 Architecture: 128 -> 96 -> 48 -> n_classes (softmax), FULLY_CONNECTED + SOFTMAX
 only (ops already in the firmware). Usage: python train.py    Apache-2.0."""
@@ -12,17 +12,22 @@ import numpy as np
 import tensorflow as tf
 from pathlib import Path
 
-HELD_OUT_LOAD = 3   # train on the other loads, test on this one
-
 ROOT = Path(__file__).parent
 d = np.load(ROOT / "data" / "features.npz")
-X, y, load = d["X"], d["y"], d["load"]
+X, y, split = d["X"], d["y"], d["split"]
 classes = json.loads((ROOT / "data" / "classes.json").read_text())
 
-ti = np.where(load != HELD_OUT_LOAD)[0]     # train indices
-vi = np.where(load == HELD_OUT_LOAD)[0]     # held-out load = validation
-print(f"train windows: {len(ti)} (loads {sorted(set(load[ti]))}) | "
-      f"val windows: {len(vi)} (held-out load {HELD_OUT_LOAD})")
+ti = np.where(split == 0)[0]     # train windows
+vi = np.where(split == 1)[0]     # test windows
+
+# shuffle WITHIN each group (the temporal 70/30 split already decided membership;
+# this only randomizes order inside train and inside test). Fixed seed = reproducible.
+rng = np.random.default_rng(0)
+rng.shuffle(ti)
+rng.shuffle(vi)
+
+print(f"train windows: {len(ti)} | test windows: {len(vi)} "
+      f"({100*len(vi)/(len(ti)+len(vi)):.0f}% test)")
 
 # normalization fit on TRAIN only (no leakage)
 mean = float(X[ti].mean())
@@ -42,13 +47,12 @@ model.fit(Xn[ti], y[ti], validation_data=(Xn[vi], y[vi]),
           epochs=30, batch_size=128, verbose=2)
 
 loss, acc = model.evaluate(Xn[vi], y[vi], verbose=0)
-print(f"\nHeld-out-load (load {HELD_OUT_LOAD}) accuracy: {acc*100:.2f}%  "
-      f"[leakage-free]")
+print(f"\nTest (last-30%-of-each-file) accuracy: {acc*100:.2f}%  [12-bit ADC, no overlap]")
 
 model.save(ROOT / "model_fp32.keras")
 np.savez(ROOT / "data" / "val_split.npz", vi=vi, ti=ti)
 (ROOT / "data" / "norm.json").write_text(json.dumps(
     {"mean": mean, "std": std, "win": 1024, "hop": 512, "nbins": 128}))
 (ROOT / "data" / "fp32_acc.json").write_text(json.dumps(
-    {"fp32_acc": float(acc), "held_out_load": HELD_OUT_LOAD}))
+    {"fp32_acc": float(acc), "split": "per-file-70-30-temporal"}))
 print("saved model_fp32.keras, norm.json (train-only stats)")

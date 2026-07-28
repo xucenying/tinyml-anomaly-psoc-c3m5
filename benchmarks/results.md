@@ -1,7 +1,41 @@
 # Optimization ladder — KIT_PSC3M5_EVK (Cortex-M33 @ 240 MHz, FPU/softfp)
 
 Model: CWRU 10-class bearing-fault MLP (128 FFT features → 96 → 48 → 10).
-Every row: same 10 test vectors, 10/10 correct, DWT cycle counter, `-O2`.
+Every row: same 10 test vectors, DWT cycle counter, `-O2`.
+
+## Data methodology (revision 2 — 2026-07-28)
+
+The pipeline was tightened for a fully defensible accuracy number. All results
+below use this methodology:
+
+- **Drive-end (DE) channel only**, every file treated as 12 kHz.
+- **12-bit ADC simulation**: each raw sample is quantized to a 12-bit signed
+  count at a fixed ±8 g full-scale (clip to [−2048, 2047]) *before* feature
+  extraction, so the pipeline runs on the same integer measurements a real MCU
+  ADC produces (`ml/preprocess.py`).
+- **Split = per-file 70/30 temporal, no overlap**: for every recording the first
+  70 % (in time) trains and the last 30 % tests; any window straddling the 70 %
+  border is dropped, so **no train window shares a single raw sample with any
+  test window**. Normalization (mean/std) is fit on train windows only.
+- Train 8,258 windows · test 3,494 windows.
+
+**Accuracy (surrogate-validated; confirm with the INT8 model after retrain):**
+100.0 % test accuracy, 100 % per-class recall, and 10/10 on the one-window-per-
+class board proxy. Board FFT-on-counts matches the PC feature pipeline to
+2.4e-7. The 12-bit ADC quantization did **not** reduce accuracy.
+
+**Honest caveat on the split.** This per-file temporal split removes the window-
+overlap leakage, but train and test still come from the *same recording, load,
+and bearing* — separated only in time. It is therefore an **easier** test than
+the previous leave-one-load-out split (which held out a whole operating
+condition and scored 98.34 %). 100 % here reflects the easier task, not a
+stronger generalization claim. Leave-one-load-out remains the harder benchmark;
+this split is what was requested for the ADC/no-overlap study.
+
+**Cycle counts are unchanged by this revision.** Latency depends on the model
+architecture (128→96→48→10) and the kernels, not on the training data, and the
+FFT cost is data-independent. The architecture is identical, so every cycle
+figure below carries over; reflash the final config to reconfirm.
 
 ## Main table (consistent config: -O2, softfp)
 

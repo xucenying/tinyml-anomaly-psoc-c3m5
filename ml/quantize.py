@@ -64,8 +64,10 @@ print(f"accuracy delta: {(a32-a8)*100:+.2f} pp; size ratio: {len(fp32)/len(int8)
     {"fp32_bytes": len(fp32), "int8_bytes": len(int8),
      "fp32_acc": a32, "int8_acc": a8}))
 
-# --- export C array for firmware ---
+# --- export C arrays for firmware (INT8 for rungs 2-5, FP32 for rung 1) ---
 conv_script = ROOT.parent / "firmware" / "convert_tflite_to_c.py"
 subprocess.run([sys.executable, str(conv_script), str(ROOT / "model_int8.tflite"),
                 str(ROOT.parent / "firmware" / "model_data.h")], check=True)
-print("wrote ../firmware/model_data.h — copy into the ModusToolbox project")
+subprocess.run([sys.executable, str(conv_script), str(ROOT / "model_fp32.tflite"),
+                str(ROOT.parent / "firmware" / "model_data_fp32.h")], check=True)
+print("wrote ../firmware/model_data.h (INT8) and model_data_fp32.h (FP32)")
