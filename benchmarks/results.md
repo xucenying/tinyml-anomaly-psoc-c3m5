@@ -21,10 +21,11 @@ below use this methodology:
   test window**. Normalization (mean/std) is fit on train windows only.
 - Train 8,258 windows · test 3,494 windows.
 
-**Accuracy (surrogate-validated; confirm with the INT8 model after retrain):**
-100.0 % test accuracy, 100 % per-class recall, and 10/10 on the one-window-per-
-class board proxy. Board FFT-on-counts matches the PC feature pipeline to
-2.4e-7. The 12-bit ADC quantization did **not** reduce accuracy.
+**Accuracy (confirmed on the real trained model, 2026-08-06):** FP32 100.00 %
+val accuracy, INT8 100.00 % val accuracy — 0.00 pp drop from quantization
+(`ml/quantize.py`), plus 10/10 on the one-window-per-class board proxy. Board
+FFT-on-counts matches the PC feature pipeline to 2.4e-7. The 12-bit ADC
+quantization did **not** reduce accuracy.
 
 **Honest caveat on the split.** This per-file temporal split removes the window-
 overlap leakage, but train and test still come from the *same recording, load,

@@ -90,16 +90,17 @@ CMSIS-NN vs naive INT8 (both `-O2`): **180,728 → 83,807 cycles = 2.16× faster
 
 | stage | accuracy |
 |---|---|
-| fp32_ref | 100.0% (surrogate-validated) |
-| int8_ref | 100.0% (surrogate-validated) |
-| int8_cmsisnn | 100.0% (surrogate-validated) |
+| fp32_ref | 100.00% |
+| int8_ref | 100.00% |
+| int8_cmsisnn | 100.00% |
 
-INT8 quantization costs **0.00 pp accuracy drop** vs FP32 on validation.
+Confirmed on the real trained model (`ml/quantize.py`): FP32 100.00% val
+accuracy, INT8 100.00% val accuracy — **0.00 pp accuracy drop** from
+quantization, model size 72,236 B → 24,152 B (3.0× smaller).
 
 The 100.0% figure is on the 70/30 temporal split (see "Data methodology"
-below) and is **surrogate-validated** — confirm against the actual INT8
-model after retraining. The harder leave-one-load-out split scores **98.34%**
-and is the more meaningful generalization number; see "Scope and limits".
+below). The harder leave-one-load-out split scores **98.34%** and is the
+more meaningful generalization number; see "Scope and limits".
 
 ### Numerical accuracy (the FFT itself)
 
@@ -209,6 +210,16 @@ benchmarks/    results.md — the full measured tables and method
 - **Firmware toolchain:** ModusToolbox™ (includes `arm-none-eabi-gcc`).
 - **ML toolchain:** Python **3.12** — TensorFlow doesn't yet publish wheels for
   newer Python versions, so a newer interpreter will fail at `pip install`.
+- **The buildable firmware project lives in a separate repo:**
+  [tinyml-anomaly-psoc-c3m5-fw](https://github.com/xucenying/tinyml-anomaly-psoc-c3m5-fw).
+  This repo (`ml/`, `firmware/`, `harness` results, `replay/`) holds the
+  training pipeline, the source trees to copy into the firmware project, and
+  the results/writeup. Clone the firmware repo as a sibling of this one so
+  the relative paths below (`../tinyml-anomaly-psoc-c3m5-fw/`) resolve:
+  ```bash
+  git clone https://github.com/xucenying/tinyml-anomaly-psoc-c3m5-fw.git
+  cd tinyml-anomaly-psoc-c3m5-fw && make getlibs && cd ..
+  ```
 
 ### 1. Build the model (`ml/`)
 
@@ -218,9 +229,13 @@ uses the lighter `tflite-runtime` package instead.
 
 ```bash
 cd ml
+python --version              # confirm 3.12.x before continuing - see Prerequisites
 python -m venv .venv && . .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt   # tensorflow, numpy, scipy, matplotlib, requests
+python -m pip install -r requirements.txt   # tensorflow, numpy, scipy, matplotlib, requests
 python download_data.py       # fetches the CWRU .mat files into data/cwru/ (~400 MB)
+                               # prints "N/40 files present"; if N<40, just rerun -
+                               # it skips files already downloaded and retries the rest
+                               # (dropped connections on large files are common)
 python preprocess.py          # DE-only, 12-bit ADC, per-file 70/30 no-overlap split
 python train.py                # train MLP (128->96->48->10), write model_fp32.keras + norm.json
 python quantize.py             # INT8 tflite + model_data.h + model_data_fp32.h
@@ -228,12 +243,14 @@ python make_vectors.py         # test_vectors.h + raw_vectors.h + norm.h (matche
 python export_raw_windows.py   # (demo) all raw test windows as ADC counts
 ```
 
-Then sync the generated headers into the buildable firmware project (still
-from inside `ml/`, so `firmware/` is `../firmware/`):
+Then sync the generated headers into the buildable firmware project — a
+separate repo, [tinyml-anomaly-psoc-c3m5-fw](https://github.com/xucenying/tinyml-anomaly-psoc-c3m5-fw)
+(cloned as a sibling per "Prerequisites" above; still from inside `ml/`, so
+`firmware/` is `../firmware/`):
 
 ```bash
 cp ../firmware/{model_data.h,model_data_fp32.h,test_vectors.h,raw_vectors.h,norm.h} \
-   ../example_psoc/hello-world/
+   ../../tinyml-anomaly-psoc-c3m5-fw/
 cd ..
 ```
 
@@ -249,13 +266,14 @@ correct/10 and avg cycles:
 | 5 | + on-board CMSIS-DSP FFT | rung 4 + `FE_USE_CMSIS` + `cmsis-dsp/` | FFT ~109,210 |
 
 **How to switch between rungs.** All of this happens inside the
-`example_psoc/hello-world/` project — that's the actual buildable
-ModusToolbox project (`firmware/` only holds the source *to be copied in*,
-it isn't compiled directly). Each rung needs three things changed together,
-all inside `hello-world/`: which folder is copied in as `hello-world/tflite-micro/`,
-one or two lines in `hello-world/Makefile`'s `DEFINES+=`, and one or two lines
-near the top of `hello-world/main.cpp`. The table above shows *what* changes;
-here's exactly *where*:
+[tinyml-anomaly-psoc-c3m5-fw](https://github.com/xucenying/tinyml-anomaly-psoc-c3m5-fw)
+repo cloned in "Prerequisites" above — that's the actual buildable
+ModusToolbox project (`firmware/` in *this* repo only holds the source *to be
+copied into* the firmware repo; it isn't compiled directly). Each rung needs
+three things changed together, all inside the firmware repo: which folder is
+copied in as its `tflite-micro/`, one or two lines in its `Makefile`'s
+`DEFINES+=`, and one or two lines near the top of its `main.cpp`. The table
+above shows *what* changes; here's exactly *where*:
 
 | # | copy this folder in | change in `Makefile` | change in `main.cpp` |
 |---|---|---|---|
@@ -267,9 +285,9 @@ here's exactly *where*:
 
 After changing all three things for a rung: `make clean && make build && make
 program`, then read the results off the serial terminal. **Heads up:** the
-`Makefile` and `main.cpp` checked into this repo are already set to rung 5's
-config (the fastest, final build) — so working through the rungs in order
-means editing *backward* from rung 5 to rung 1, not forward.
+`Makefile` and `main.cpp` checked into the firmware repo are already set to
+rung 5's config (the fastest, final build) — so working through the rungs in
+order means editing *backward* from rung 5 to rung 1, not forward.
 
 ### 2. Port TFLite-Micro to the board (`firmware/`)
 
