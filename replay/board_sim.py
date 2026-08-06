@@ -33,7 +33,7 @@ SIM_INF_CYCLES = 83807     # measured int8_cmsisnn inference avg
 
 
 # --- feature extraction: mirrors ml/preprocess.py + firmware/features.h ---
-_WIN, _NBINS = 1024, 128
+_WIN, _NBINS, _HOP = 1024, 128, 512
 _HANN = np.hanning(_WIN).astype(np.float32)
 
 
@@ -62,6 +62,8 @@ class Board:
         self.fault_run = self.normal_run = 0
         self.alert = False
         self.rng = np.random.default_rng(0)
+        self.ring = np.zeros(_WIN, dtype=np.float32)   # sliding window
+        self.filled = 0
 
     def infer(self, feat):
         q = np.clip(np.round(feat / self.in_s + self.in_zp), -128, 127).astype(np.int8)
@@ -72,8 +74,15 @@ class Board:
         conf = int((raw[best] - self.out_zp) * self.out_s * 100)
         return best, conf
 
-    def step(self, window) -> str:
-        feat = extract_features(window, self.mean, self.std)   # on-board FFT
+    def step(self, chunk) -> str:
+        # slide the 1024-window: drop oldest HOP, append newest HOP (mirrors firmware)
+        self.ring = np.concatenate([self.ring[_HOP:],
+                                    np.asarray(chunk, dtype=np.float32)])
+        if self.filled < _WIN:
+            self.filled += _HOP
+        if self.filled < _WIN:
+            return "WARM\r\n"                                   # window not full yet
+        feat = extract_features(self.ring, self.mean, self.std)  # on-board FFT
         best, conf = self.infer(feat)
         is_fault = best != NORMAL_CLASS and conf >= CONF_THRESH
         if is_fault:
@@ -106,12 +115,12 @@ def serve(port: int, model_path: Path):
     readfn = lambda n: conn.recv(n)
     try:
         while True:
-            window, ok = read_frame(readfn)
-            if window is None:
+            chunk, ok = read_frame(readfn)
+            if chunk is None:
                 conn.sendall(b"ERR desync\r\n"); continue
             if not ok:
                 conn.sendall(b"ERR crc\r\n"); continue
-            conn.sendall(board.step(window).encode())
+            conn.sendall(board.step(chunk).encode())
     except (EOFError, ConnectionError):
         print("[board_sim] host disconnected", file=sys.stderr, flush=True)
     finally:

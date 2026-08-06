@@ -71,10 +71,10 @@ static inline uint8_t uart_get_byte(void) {
     return (uint8_t)b;
 }
 
-/* Read one protocol frame into raw_win[1024]. Returns true on a CRC-valid frame,
- * false on a CRC mismatch (caller reports and keeps streaming). Blocks until a
- * well-formed SYNC/len header arrives, so a stalled host just pauses the loop. */
-static bool read_frame(float *raw_win) {
+/* Read one chunk frame: RPL_HOP int16 ADC counts -> hop[RPL_HOP] as float.
+ * Returns true on a CRC-valid chunk, false on desync/CRC mismatch. */
+static bool read_chunk(float *hop) {
+    static int16_t buf16[RPL_HOP];              /* 1024 bytes staging (12-bit ADC) */
     /* hunt for SYNC0 SYNC1 */
     for (;;) {
         if (uart_get_byte() != RPL_SYNC0) continue;
@@ -84,39 +84,51 @@ static bool read_frame(float *raw_win) {
     len |= (uint16_t)uart_get_byte() << 8;
     if (len != RPL_PAYLOAD_LEN) return false;   /* desync; resync on next call */
 
-    uint8_t *raw = (uint8_t *)raw_win;          /* 4096 bytes, LE float32 in place */
+    uint8_t *raw = (uint8_t *)buf16;            /* 1024 bytes, LE int16 in place */
     for (uint16_t i = 0; i < RPL_PAYLOAD_LEN; ++i) raw[i] = uart_get_byte();
 
     uint16_t crc = (uint16_t)uart_get_byte();
     crc |= (uint16_t)uart_get_byte() << 8;
-    return crc == rpl_crc16(raw, RPL_PAYLOAD_LEN);
+    if (crc != rpl_crc16(raw, RPL_PAYLOAD_LEN)) return false;
+
+    for (int i = 0; i < RPL_HOP; ++i) hop[i] = (float)buf16[i];   /* counts -> float */
+    return true;
 }
 
-/* Continuous replay: read RAW window -> on-board FFT features -> quantize ->
- * invoke -> alert state machine. This is the full sensor-to-alert pipeline on
- * the chip. Never returns. Alert latches after kDebounceFault consecutive
- * confident faults and clears after kDebounceClear consecutive normals. */
-static void run_replay(tflite::MicroInterpreter &interpreter,
+/* Continuous ADC stream: read HOP-sample chunks, slide a 1024-sample window
+ * (hop = RPL_HOP), and on every FULL window run on-board FFT -> INT8 classify ->
+ * debounced alert. Prints "WARM" until the first window is full. Never returns.
+ * This is exactly how a live ADC+DMA feed would drive the pipeline. */
+static void run_stream(tflite::MicroInterpreter &interpreter,
                        TfLiteTensor *in, TfLiteTensor *out,
                        float in_scale, int in_zp,
                        float out_scale, int out_zp) {
-    static float raw_win[RPL_RAW_DIM];    /* 1024 raw samples (the "measurement") */
-    static float feat[FE_NBINS];          /* 128 FFT features                     */
+    static float ring[RPL_RAW_DIM];       /* sliding 1024-sample window */
+    static float hop[RPL_HOP];            /* newest chunk               */
+    static float feat[FE_NBINS];          /* 128 FFT features           */
     uint32_t seq = 0;
-    int fault_run = 0, normal_run = 0;
+    int fault_run = 0, normal_run = 0, filled = 0;
     bool alert = false;
 
     fe_init();   /* Hann table + FFT instance once */
 
-    printf("\r\n=== replay mode: raw windows -> on-board FFT -> classify (115200 8N1) ===\r\n");
+    printf("\r\n=== ADC stream: %d-sample chunks -> sliding %d-window -> FFT -> classify ===\r\n",
+           RPL_HOP, RPL_RAW_DIM);
     led_set(false);
 
     for (;;) {
-        if (!read_frame(raw_win)) { printf("ERR crc\r\n"); continue; }
+        if (!read_chunk(hop)) { printf("ERR crc\r\n"); continue; }
 
-        /* raw window -> 128 features (on-board FFT, timed) */
+        /* slide the window: drop oldest HOP, append newest HOP */
+        for (int i = 0; i < RPL_RAW_DIM - RPL_HOP; ++i) ring[i] = ring[i + RPL_HOP];
+        for (int i = 0; i < RPL_HOP; ++i) ring[RPL_RAW_DIM - RPL_HOP + i] = hop[i];
+
+        if (filled < RPL_RAW_DIM) filled += RPL_HOP;
+        if (filled < RPL_RAW_DIM) { printf("WARM\r\n"); continue; }  /* window not full yet */
+
+        /* full window -> 128 features (on-board FFT, timed) */
         uint32_t f0 = dwt_now();
-        fe_extract(raw_win, feat);
+        fe_extract(ring, feat);
         uint32_t fft_dt = dwt_now() - f0;
 
         if (in->type == kTfLiteInt8) {
@@ -243,17 +255,17 @@ int main(void)
 
         printf("[%s] true=%-7s pred=%-7s conf=%3d%%  cycles=%lu (%lu us)\r\n",
                ok ? "PASS" : "FAIL", kTestLabels[t], kTestLabels[best], conf_pct,
-               (unsigned long)dt, (unsigned long)(dt / 240));
+               (unsigned long)dt, (unsigned long)(dt / 180));
     }
 
-    printf("\r\n%d/%d correct, avg %lu cycles/inference (%lu us @240MHz)\r\n",
+    printf("\r\n%d/%d correct, avg %lu cycles/inference (%lu us @180MHz)\r\n",
            correct, kNumTests,
            (unsigned long)(total_cycles / kNumTests),
-           (unsigned long)(total_cycles / kNumTests / 240));
+           (unsigned long)(total_cycles / kNumTests / 180));
     printf("=== classifier test complete ===\r\n");
 
     /* Hand off to continuous replay: PC streams feature windows, board
      * classifies each and raises a debounced fault alert (LED + UART). */
-    run_replay(interpreter, in, out, in_scale, in_zp, out_scale, out_zp);
+    run_stream(interpreter, in, out, in_scale, in_zp, out_scale, out_zp);
     return 0;   /* unreachable */
 }

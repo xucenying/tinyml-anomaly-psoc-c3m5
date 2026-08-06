@@ -1,12 +1,27 @@
 #!/usr/bin/env python3
-"""Generate the three firmware headers from the SAME test windows, so the
-feature-vector test (test_vectors.h) and the raw-window FFT test (raw_vectors.h)
+"""Generate a small, fixed "known-answer" test kit baked into the firmware, so
+the board can self-test at boot with no PC and no live streaming needed.
+
+Picks one TEST window per class (10 total, one per fault type) and writes
+three C headers from the SAME underlying windows, so the two on-board tests
 use identical data:
 
-  firmware/test_vectors.h  one TEST window per class, 128 standardized features
-  firmware/raw_vectors.h   the matching raw 1024-sample windows as 12-bit ADC
-                           counts (what the board's FFT path consumes)
-  firmware/norm.h          FE_WIN/HOP/NBINS + train-only mean/std
+  firmware/test_vectors.h  one TEST window per class, 128 standardized
+                           features + the correct label. Tests just the
+                           neural net: given these 128 numbers, predict
+                           the right class?
+  firmware/raw_vectors.h   the matching raw 1024-sample windows, as 12-bit
+                           ADC counts (what the board's FFT path consumes).
+                           Tests the whole chain: given raw sensor data, run
+                           the FFT yourself, then predict the right class?
+  firmware/norm.h          FE_WIN/HOP/NBINS + train-only mean/std, so the
+                           board's own feature extraction uses the exact
+                           settings the model was trained with.
+
+Using the SAME windows for both headers is deliberate: if the board passes
+test_vectors.h but fails raw_vectors.h, the bug is specifically in the
+board's own FFT/feature-extraction code, not the model or the data - that's
+how an earlier real bug in this project got diagnosed.
 
 Run after train.py. Usage: python make_vectors.py    Apache-2.0."""
 import json, numpy as np

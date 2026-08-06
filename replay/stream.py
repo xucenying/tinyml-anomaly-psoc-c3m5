@@ -1,31 +1,39 @@
 #!/usr/bin/env python3
-"""stream.py — PC host for the replay rig. Streams RAW held-out CWRU vibration
-windows (1024 samples each) to the C3M5 (or the board simulator), which runs the
-full on-chip pipeline (FFT features + INT8 classify). Injects a fault mid-run and
-shows a live detection dashboard.
+"""stream.py — PC host for the replay rig. Streams a CONTINUOUS 12-bit ADC sample
+stream (in 512-sample chunks = ADC/DMA half-buffers) to the C3M5 (or the board
+simulator). The board windows the stream itself (sliding 1024, hop 512), runs the
+full on-chip pipeline (FFT + INT8 classify), and raises a debounced ALERT.
+
+Samples are drawn from the held-out TEST region (last 30%) of the CWRU recordings,
+so nothing was trained on. A fault is injected by switching the source recording
+mid-stream. This host prints a live dashboard and measures detection latency.
 
 Transports:
-    --serial COM5           real board over USB-UART (needs pyserial)
+    --serial COM5           real board over USB-UART (use --baud 921600 for 12 kHz)
     --tcp 127.0.0.1:9000    an already-running board_sim
     --sim                   auto-launch board_sim on localhost (no hardware)
 
-Scenario (default): stream healthy windows, switch to a fault class to mimic a
-developing fault, then return to healthy. The board raises a debounced ALERT;
-this host measures detection latency and flags any false alarms.
+At 12 kHz each chunk is 512/12000 = 42.7 ms of signal; pass --interval 0.0427 to
+pace the stream at real time (needs ~921600 baud on serial).
 
 Examples:
     python stream.py --sim
-    python stream.py --sim --fault ir_014 --normal 10 --fault-frames 25
-    python stream.py --serial COM5
+    python stream.py --serial COM5 --baud 921600 --interval 0.0427
+    python stream.py --sim --fault ir_014 --normal 8 --fault-chunks 24
 Apache-2.0."""
 from __future__ import annotations
 import argparse, json, socket, subprocess, sys, time
 from pathlib import Path
 
 import numpy as np
-from protocol import pack_frame
+from protocol import pack_frame, HOP
 
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT.parent / "ml"))
+from preprocess import de_signal, adc_quantize   # noqa: E402  (shared ADC pipeline)
+
+FS = 12000                      # assumed sample rate (Hz)
+CWRU = ROOT.parent / "ml" / "data" / "cwru"
 
 
 # ---------- transports ----------
@@ -67,58 +75,59 @@ class SerialTransport(Transport):
     def close(self): self.s.close()
 
 
-# ---------- data ----------
-def load_windows():
-    """Load RAW 1024-sample held-out windows (what a sensor produces). The board
-    runs the FFT + classify itself, so we stream raw samples, not features."""
-    p = ROOT.parent / "ml/data/raw_windows.npz"
-    if not p.exists():
-        sys.exit("missing ml/data/raw_windows.npz — run: python ml/export_raw_windows.py")
-    d = np.load(p)
-    X, y = d["X_raw"].astype(np.float32), d["y"]
-    labels = json.loads((ROOT.parent / "ml/data/classes.json").read_text())
-    by_class = {lab: X[y == i] for i, lab in enumerate(labels)}
-    return labels, by_class
+# ---------- data: continuous ADC sample streams ----------
+def class_stream(label, n_samples, files, rng):
+    """A contiguous run of n_samples 12-bit ADC counts from the TEST region
+    (last 30%) of a recording of `label`."""
+    cand = [f for f in files if f.startswith(label + "_")]
+    if not cand:
+        sys.exit(f"no recording for class '{label}'")
+    f = cand[int(rng.integers(len(cand)))]
+    sig = adc_quantize(de_signal(CWRU / f))
+    test = sig[int(0.70 * len(sig)):]          # held-out region only
+    if len(test) < n_samples:
+        test = np.tile(test, int(np.ceil(n_samples / len(test))))
+    start = int(rng.integers(0, len(test) - n_samples + 1))
+    return test[start:start + n_samples].astype(np.float32)
 
 
-def build_scenario(by_class, normal_n, fault_label, fault_n, tail_n, seed):
-    rng = np.random.default_rng(seed)
-    def take(lab, n):
-        pool = by_class[lab]
-        idx = rng.integers(0, len(pool), size=n)
-        return [(lab, pool[i]) for i in idx]
-    return (take("normal", normal_n)
-            + take(fault_label, fault_n)
-            + take("normal", tail_n))
+def build_scenario(files, fault_label, n_normal, n_fault, n_tail, rng):
+    """Return a list of (truth_label, chunk[HOP]) — healthy, then fault, then
+    healthy — as a continuous sample stream chopped into HOP-sized chunks."""
+    def chunks(label, nchunks):
+        s = class_stream(label, nchunks * HOP, files, rng)
+        return [(label, s[k * HOP:(k + 1) * HOP]) for k in range(nchunks)]
+    return chunks("normal", n_normal) + chunks(fault_label, n_fault) + chunks("normal", n_tail)
 
 
 # ---------- run ----------
-def run(tr: Transport, plan, labels, fault_label):
-    # No upfront banner read: a real board stays silent in read_frame until it
-    # receives a frame (only the sim greets on connect). We stream first, then
-    # skip any pre-amble lines (boot self-test, banners, ERR/ALERT) until "RES".
-    hdr = (f"{'seq':>4} {'streamed':>9} {'pred':>9} {'conf':>5} "
+def run(tr: Transport, plan, fault_label):
+    hdr = (f"{'chunk':>5} {'streamed':>9} {'pred':>9} {'conf':>5} "
            f"{'fft_cyc':>8} {'inf_cyc':>8}  state")
     print(hdr); print("-" * len(hdr))
 
     fault_onset = next(i for i, (lab, _) in enumerate(plan) if lab != "normal")
     alert_at = None
-    correct = 0
-    false_alerts = 0
+    correct = windows = false_alerts = 0
 
-    for i, (true_lab, window) in enumerate(plan):
-        tr.write(pack_frame(window))
-        # RES <seq> <pred_idx> <label> <conf%> <fft_cyc> <inf_cyc> <ok|ALERT>
+    for i, (true_lab, chunk) in enumerate(plan):
+        tr.write(pack_frame(chunk))
         parts = tr.readline().split()
-        while not parts or parts[0] != "RES":
-            if parts:                      # surface board pre-amble / diagnostics
-                print(f"     board| {' '.join(parts)}")
+        # skip banner / diagnostics until a protocol line
+        while not parts or parts[0] not in ("RES", "WARM", "ERR"):
+            if parts:
+                print(f"      board| {' '.join(parts)}")
             parts = tr.readline().split()
-        pred_lab = parts[3]
-        conf = parts[4]
-        fft_cyc = int(parts[5])
-        inf_cyc = int(parts[6])
-        state = parts[7]
+
+        if parts[0] != "RES":                 # WARM (window filling) or ERR
+            marker = " (fault injected)" if i == fault_onset else ""
+            print(f"{i:>5} {true_lab:>9} {'--':>9} {'--':>5} "
+                  f"{'--':>8} {'--':>8}  {parts[0]}{marker}")
+            continue
+
+        pred_lab, conf = parts[3], parts[4]
+        fft_cyc, inf_cyc, state = int(parts[5]), int(parts[6]), parts[7]
+        windows += 1
         correct += (pred_lab == true_lab)
         if state == "ALERT":
             if alert_at is None and i >= fault_onset:
@@ -127,21 +136,20 @@ def run(tr: Transport, plan, labels, fault_label):
                 false_alerts += 1
         flag = "  <== ALERT" if state == "ALERT" else ""
         marker = " (fault injected)" if i == fault_onset else ""
-        print(f"{i:>4} {true_lab:>9} {pred_lab:>9} {conf:>5} "
+        print(f"{i:>5} {true_lab:>9} {pred_lab:>9} {conf:>5} "
               f"{fft_cyc:>8} {inf_cyc:>8}  {state}{flag}{marker}")
 
     print("-" * len(hdr))
-    total = len(plan)
-    print(f"\nframes: {total}   window pred-accuracy: {correct}/{total} "
-          f"= {100*correct/total:.1f}%")
+    ms = 1000.0 * HOP / FS
+    print(f"\nchunks sent: {len(plan)}   classified windows: {windows}   "
+          f"accuracy: {correct}/{windows} = {100*correct/max(windows,1):.1f}%")
     if alert_at is not None:
-        lat = alert_at - fault_onset + 1
-        # ~43 ms per real CWRU window (hop 512 @ ~12 kHz)
-        print(f"fault injected at frame {fault_onset} ({fault_label}); "
-              f"ALERT at frame {alert_at}  ->  detection latency {lat} frames "
-              f"(~{lat*43} ms of signal)")
+        lat = alert_at - fault_onset
+        print(f"fault injected at chunk {fault_onset} ({fault_label}); "
+              f"ALERT at chunk {alert_at}  ->  latency {lat} chunks "
+              f"(~{lat*ms:.0f} ms @ {FS//1000} kHz)")
     else:
-        print(f"fault injected at frame {fault_onset} ({fault_label}); "
+        print(f"fault injected at chunk {fault_onset} ({fault_label}); "
               f"no ALERT raised (check thresholds)")
     print(f"false alerts during healthy stretch: {false_alerts}")
 
@@ -152,21 +160,23 @@ def main():
     g.add_argument("--serial", metavar="PORT", help="board COM/tty port")
     g.add_argument("--tcp", metavar="HOST:PORT", help="running board_sim")
     g.add_argument("--sim", action="store_true", help="auto-launch board_sim")
-    ap.add_argument("--baud", type=int, default=115200)
+    ap.add_argument("--baud", type=int, default=921600, help="serial baud (12 kHz needs ~921600)")
     ap.add_argument("--fault", default="or_021", help="fault class to inject")
-    ap.add_argument("--normal", type=int, default=8, help="healthy frames before")
-    ap.add_argument("--fault-frames", type=int, default=20, dest="fault_n")
-    ap.add_argument("--tail", type=int, default=8, help="healthy frames after")
+    ap.add_argument("--normal", type=int, default=8, help="healthy chunks before")
+    ap.add_argument("--fault-chunks", type=int, default=20, dest="fault_n")
+    ap.add_argument("--tail", type=int, default=8, help="healthy chunks after")
     ap.add_argument("--interval", type=float, default=0.0,
-                    help="seconds between frames (0 = as fast as possible)")
+                    help="seconds between chunks (0 = as fast as possible; 0.0427 = 12 kHz real time)")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--sim-port", type=int, default=9007)
     a = ap.parse_args()
 
-    labels, by_class = load_windows()
-    if a.fault not in by_class or a.fault == "normal":
+    labels = json.loads((ROOT.parent / "ml/data/classes.json").read_text())
+    files = json.loads((ROOT.parent / "ml/data/files.json").read_text())
+    if a.fault not in labels or a.fault == "normal":
         sys.exit(f"--fault must be one of {[l for l in labels if l!='normal']}")
-    plan = build_scenario(by_class, a.normal, a.fault, a.fault_n, a.tail, a.seed)
+    rng = np.random.default_rng(a.seed)
+    plan = build_scenario(files, a.fault, a.normal, a.fault_n, a.tail, rng)
 
     proc = None
     try:
@@ -174,7 +184,6 @@ def main():
             proc = subprocess.Popen(
                 [sys.executable, str(ROOT / "board_sim.py"), "--port", str(a.sim_port)],
                 stderr=subprocess.DEVNULL, text=True)
-            # wait for the sim to start listening (model load can take a few s)
             for _ in range(150):
                 try:
                     tr = TcpTransport("127.0.0.1", a.sim_port); break
@@ -187,13 +196,12 @@ def main():
         else:
             tr = SerialTransport(a.serial, a.baud)
 
-        # optional pacing wrapper
         if a.interval > 0:
             orig = tr.write
             def paced(b, _o=orig): _o(b); time.sleep(a.interval)
             tr.write = paced  # type: ignore
 
-        run(tr, plan, labels, a.fault)
+        run(tr, plan, a.fault)
         tr.close()
     finally:
         if proc:

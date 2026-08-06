@@ -2,12 +2,22 @@
 """CWRU preprocessing: raw vibration -> 12-bit-ADC -> FFT feature vectors.
 
 Pipeline (mirrors the on-device chain in firmware/features.h):
-  DE channel only, treated as 12 kHz for every file.
+  DE channel only, use only the 12 kHz data.
   1) simulate the ADC: quantize the raw signal to 12-bit signed counts,
      fixed full-scale +/-8 g (ADC_FS), clip to [-2048, 2047].  A real MCU ADC
      hands you integer counts, not floats -- this injects that quantization.
-  2) 1024-sample window (hop 512) -> Hann -> rFFT -> |mag| bins 1..512
-     -> average-pool x4 -> 128 -> log1p.
+  2) turn each 1024-sample window (hop 512) into a 128-number "frequency
+     fingerprint" the model actually trains on:
+       - Hann: taper the window's edges to zero (reduces FFT edge artifacts)
+       - rFFT: Fast Fourier Transform -> how much vibration energy is present
+         at each frequency, like a graphic equalizer. Gives 512 frequency
+         bins (bins 1..512, DC/bin-0 dropped).
+       - |mag|: keep just the magnitude (strength) of each bin, discard phase.
+       - average-pool x4: average every 4 neighboring bins together,
+         512 -> 128 numbers. Shrinks the vector to fit the tiny on-device
+         model, trading off some frequency resolution.
+       - log1p: log-compress each of the 128 numbers, so very loud and very
+         quiet frequency content are both represented fairly (like decibels).
   (standardization mean/std is fit LATER, train-only, in train.py.)
 
 Train/test split: per FILE, first 70% of the recording (in time) = train,
@@ -15,9 +25,16 @@ last 30% = test, no shuffling. Any window straddling the 70% border is DROPPED
 so no train window shares a single raw sample with any test window. (Order
 inside each group is shuffled later, in train.py.)
 
-Outputs data/features.npz with, per kept window:
+Outputs data/features.npz - the ready-to-train dataset, and the input to
+train.py - with, per kept window:
   X [N,128] float32 features, y [N] class, load [N], split [N] (0=train,1=test),
-  src [N] file index, start [N] sample offset. Also data/files.json, classes.json.
+  src [N] file index, start [N] sample offset.
+Also two small lookup tables, since features.npz stores everything as plain
+numbers (not names) to stay small and fast to load:
+  data/classes.json - the 10 class names in order, so y's class number (e.g. 4)
+    can be translated back to its name (e.g. "ir_021").
+  data/files.json   - the list of source .mat filenames in order, so src's file
+    number can be translated back to the actual recording filename.
 Usage: python preprocess.py    Apache-2.0."""
 import json
 import numpy as np

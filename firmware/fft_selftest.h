@@ -67,8 +67,8 @@ static void fft_selftest(tflite::MicroInterpreter &interpreter,
 
     printf("\r\n%d/%d correct | avg FFT %lu cyc (%lu us) | avg inference %lu cyc (%lu us)\r\n",
            correct, kNumRaw,
-           (unsigned long)(fft_cyc / kNumRaw), (unsigned long)(fft_cyc / kNumRaw / 240),
-           (unsigned long)(inf_cyc / kNumRaw), (unsigned long)(inf_cyc / kNumRaw / 240));
+           (unsigned long)(fft_cyc / kNumRaw), (unsigned long)(fft_cyc / kNumRaw / 180),
+           (unsigned long)(inf_cyc / kNumRaw), (unsigned long)(inf_cyc / kNumRaw / 180));
     printf("=== FFT self-test complete ===\r\n");
 }
 

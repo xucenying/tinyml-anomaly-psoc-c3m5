@@ -46,7 +46,7 @@ capture*.txt
 tflm-hello-world-psoc-c3/
 
 # Miscellaneous
-CLAUDE.md
+notes/
 
 
 .claude/

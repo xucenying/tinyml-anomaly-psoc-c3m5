@@ -6,7 +6,22 @@ recording trains, last 30% tests, straddling windows dropped -> no train window
 shares a raw sample with any test window. Normalization is fit on TRAIN only.
 
 Architecture: 128 -> 96 -> 48 -> n_classes (softmax), FULLY_CONNECTED + SOFTMAX
-only (ops already in the firmware). Usage: python train.py    Apache-2.0."""
+only (ops already in the firmware).
+
+Outputs:
+  model_fp32.keras     - the trained FP32 model; input to quantize.py.
+  data/norm.json        - mean/std (fit on TRAIN only) + window constants.
+    Any new data (incl. on-board) must be normalized with these exact
+    numbers, or the model's predictions won't make sense.
+  data/val_split.npz    - the train/test window indices (ti, vi) actually
+    used, so later steps can reload the same split without recomputing it.
+  data/fp32_acc.json    - the FP32 test accuracy + which split method was
+    used, saved as a reference to compare against later (e.g. after INT8
+    quantization).
+Also prints model.summary(), per-epoch training progress, and the final
+test accuracy on the held-out 30% of each recording.
+
+Usage: python train.py    Apache-2.0."""
 import json
 import numpy as np
 import tensorflow as tf

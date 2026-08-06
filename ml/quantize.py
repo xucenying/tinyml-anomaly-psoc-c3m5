@@ -1,10 +1,25 @@
 #!/usr/bin/env python3
 """Full-integer INT8 quantization + C-array export.
 
-Produces: model_int8.tflite, model_fp32.tflite (baseline for Phase 2),
-../firmware/model_data.h (INT8, ready for the C3M5 firmware).
-Prints FP32-vs-INT8 accuracy and size table. Usage: python quantize.py
-Apache-2.0."""
+Shrinks the trained FP32 model down to INT8 - the small, fast format that
+actually runs on the chip - and proves the shrink didn't cost accuracy.
+
+Steps:
+  1) load model_fp32.keras + test data, apply the same train-only
+     normalization used in train.py.
+  2) convert to two .tflite versions: FP32 (kept as a baseline) and full
+     INT8. The INT8 conversion needs a "representative dataset" (300 sample
+     training windows) so the converter can pick the right scale for
+     squeezing each layer's numbers into 8-bit integers (requantization).
+  3) evaluate both versions on the held-out test windows, so you can see
+     whether shrinking to INT8 actually hurt accuracy.
+  4) print + save (data/quant_report.json) a comparison table: file size and
+     accuracy for FP32 vs INT8, the size ratio, and the accuracy delta.
+  5) export both .tflite models as C header files the firmware can compile
+     in directly, since the microcontroller can't read .tflite files itself:
+     ../firmware/model_data.h (INT8) and model_data_fp32.h (FP32).
+
+Usage: python quantize.py    Apache-2.0."""
 import json, subprocess, sys
 import numpy as np
 import tensorflow as tf
