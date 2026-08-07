@@ -16,10 +16,20 @@
 #include "tensorflow/lite/schema/schema_generated.h"
 
 /* Pick ONE: model_data.h (INT8, 24 KB) or model_data_fp32.h (FP32, 72 KB) */
+//#include "model_data_fp32.h"
 #include "model_data.h"
 #include "test_vectors.h"      /* 10 validation feature vectors */
-#include "fft_selftest.h"      /* on-board FFT feature extraction test */
+
+/* INFERENCE_ONLY=1: pure-inference ladder — NO on-board FFT. Feeds the
+   pre-windowed features in test_vectors.h so FP32 / INT8 / INT8+CMSIS-NN can be
+   compared on model size, arena, and inference cycles alone.
+   Set to 0 to restore the full on-board-FFT + live-replay demo. */
+#define INFERENCE_ONLY 0
+
+#if !INFERENCE_ONLY
+#include "fft_selftest.h"
 #include "replay_protocol.h"   /* PC<->board streaming wire format */
+#endif
 
 #include <cstring>
 
@@ -64,6 +74,7 @@ static inline void led_set(bool on) {
 #endif
 }
 
+#if !INFERENCE_ONLY
 /* --- blocking single-byte UART read (shares the retarget-io SCB) --- */
 static inline uint8_t uart_get_byte(void) {
     uint32_t b;
@@ -175,6 +186,7 @@ static void run_stream(tflite::MicroInterpreter &interpreter,
                alert ? "ALERT" : "ok");
     }
 }
+#endif /* !INFERENCE_ONLY */
 
 int main(void)
 {
@@ -214,9 +226,18 @@ int main(void)
     const float out_scale = out->params.scale;
     const int   out_zp    = out->params.zero_point;
 
+#if !INFERENCE_ONLY
     /* on-board FFT feature extraction test (raw window -> FFT -> classify) */
     fft_selftest(interpreter, in, out);
+#endif
 
+#if INFERENCE_ONLY
+    /* Feature-vector-only inference test (test_vectors.h, no on-board FFT).
+     * Only meaningful in INFERENCE_ONLY mode, where fft_selftest() above did
+     * NOT run - this is then the only source of inference timing. When
+     * INFERENCE_ONLY=0, fft_selftest() already covers inference (as part of
+     * the full raw-window pipeline), so this second, redundant test is
+     * skipped entirely and compiled out. */
     int correct = 0;
     uint64_t total_cycles = 0;
 
@@ -263,9 +284,13 @@ int main(void)
            (unsigned long)(total_cycles / kNumTests),
            (unsigned long)(total_cycles / kNumTests / 180));
     printf("=== classifier test complete ===\r\n");
+#endif /* INFERENCE_ONLY */
 
-    /* Hand off to continuous replay: PC streams feature windows, board
-     * classifies each and raises a debounced fault alert (LED + UART). */
+#if !INFERENCE_ONLY
+    /* Hand off to continuous ADC stream: PC streams raw 12-bit samples in chunks,
+     * board windows them, runs on-board FFT, classifies, debounced alert (LED+UART). */
     run_stream(interpreter, in, out, in_scale, in_zp, out_scale, out_zp);
-    return 0;   /* unreachable */
+#endif
+    for (;;) { }        /* inference ladder: hold after the classifier test */
+    return 0;
 }

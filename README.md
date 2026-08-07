@@ -5,7 +5,7 @@ portable-C reference kernels down to a CMSIS-NN + CMSIS-DSP build on a bare
 microcontroller, with every speedup measured on real silicon.
 
 **Headline:** raw vibration window in → fault class out, entirely on the chip, in
-**~1,082 µs** — a **2.2× faster full pipeline** and a **2.16× faster inference path**
+**~1,086 µs** — a **2.1× faster full pipeline** and a **2.16× faster inference path**
 versus naive INT8, with the model shrunk 3× to fit flash. No cloud, no host.
 
 > Target: Infineon **KIT_PSC3M5_EVK** — Arm **Cortex-M33 @ 180 MHz** 
@@ -28,7 +28,7 @@ versus naive INT8, with the model shrunk 3× to fit flash. No cloud, no host.
   Infineon's official `ml-tflite-micro` library is pre-compiled for PSoC 6 /
   PSoC Edge only, **not** the Cortex-M33-based Control C3 — so this port fills
   a real gap.
-- **Counter-intuitive findings that teach.** Naive INT8 was **1.29× slower**
+- **Counter-intuitive findings that teach.** Naive INT8 was **1.28× slower**
   than FP32 on this FPU-equipped core; INT8 only wins *through* CMSIS-NN.
   After CMSIS-NN sped up inference, the **FFT became the bottleneck** — the
   classic "bottleneck shifts" result — so it too was optimized with CMSIS-DSP.
@@ -64,25 +64,25 @@ the board. Latencies = cycles ÷ 180 MHz (the C3M5's max CPU clock).
 
 | build | kernels | precision | avg cycles | latency | model size |
 |---|---|---|---|---|---|
-| reference | TFLM portable C (FPU) | FP32 | 140,246 | 779 µs | 72 KB |
-| reference | TFLM portable C | INT8 | 180,728 | 1,004 µs | 24 KB |
-| **CMSIS-NN** | **Arm CMSIS-NN** | **INT8** | **83,807** | **466 µs** | **24 KB** |
+| reference | TFLM portable C (FPU) | FP32 | 140,437 | 780 µs | 72 KB |
+| reference | TFLM portable C | INT8 | 179,889 | 999 µs | 24 KB |
+| **CMSIS-NN** | **Arm CMSIS-NN** | **INT8** | **83,414** | **463 µs** | **24 KB** |
 
-CMSIS-NN vs naive INT8 (both `-O2`): **180,728 → 83,807 cycles = 2.16× faster.**
+CMSIS-NN vs naive INT8 (both `-O2`): **179,889 → 83,414 cycles = 2.16× faster.**
 
 ### Rung set 2 — feature extraction (the FFT that feeds the net)
 
 | FFT implementation | avg cycles | latency | speedup |
 |---|---|---|---|
-| plain-C radix-2 rFFT | 338,114 | 1,878 µs | 1.0× |
-| **CMSIS-DSP `arm_rfft_fast_f32`** | **109,210** | **607 µs** | **3.1×** |
+| plain-C radix-2 rFFT | 334,213 | 1,856 µs | 1.0× |
+| **CMSIS-DSP `arm_rfft_fast_f32`** | **110,693** | **614 µs** | **3.0×** |
 
 ### Full on-chip pipeline (raw window → features → class)
 
 | pipeline | FFT | inference | total | speedup |
 |---|---|---|---|---|
-| plain-C FFT + CMSIS-NN | 1,878 µs | 478 µs | ~2,356 µs | 1.0× |
-| **CMSIS-DSP FFT + CMSIS-NN** | 607 µs | 475 µs | **~1,082 µs** | **2.2×** |
+| plain-C FFT + CMSIS-NN | 1,856 µs | 470 µs | ~2,327 µs | 1.0× |
+| **CMSIS-DSP FFT + CMSIS-NN** | 614 µs | 471 µs | **~1,086 µs** | **2.1×** |
 
 ## Accuracy
 
@@ -127,7 +127,7 @@ feature-level match ruled the FFT out.
 
 | stage | model (flash) | tensor arena (RAM) |
 |---|---|---|
-| fp32_ref | 72,236 B | 1,712 B |
+| fp32_ref | 72,236 B | 1,616 B |
 | int8_ref | 24,152 B | 2,228 B |
 | int8_cmsisnn | 24,152 B | 2,324 B |
 
@@ -177,17 +177,17 @@ reproduce" step 2) to fit.
 
 ## What the numbers show
 
-1. **Quantization *alone* made it slower.** Naive INT8 ran **1.29× slower** than
-   FP32 on this core (1,004 vs 779 µs), because portable-C INT8 requantization is
+1. **Quantization *alone* made it slower.** Naive INT8 ran **1.28× slower** than
+   FP32 on this core (999 vs 780 µs), because portable-C INT8 requantization is
    expensive and the M33 already has an FPU. INT8 is only a win once CMSIS-NN's
-   optimized kernels do the requantization — *then* it's 1.67× faster than FP32
+   optimized kernels do the requantization — *then* it's 1.68× faster than FP32
    and 3× smaller. The common advice "just quantize to INT8 for speed" is wrong
    on an FPU-equipped Cortex-M unless you also switch kernels.
 
-2. **The bottleneck moved.** Once CMSIS-NN made inference cheap (466 µs), the FFT
+2. **The bottleneck moved.** Once CMSIS-NN made inference cheap (463 µs), the FFT
    became roughly **4× the cost of inference** and dominated the pipeline.
    Speeding up one stage exposed the next — so the FFT had to be optimized too
-   (CMSIS-DSP), which rebalanced the pipeline to ~56% FFT / 44% inference.
+   (CMSIS-DSP), which rebalanced the pipeline to ~57% FFT / 43% inference.
    Optimization is a moving target, and the data shows exactly where it moved.
 
 ## Repository layout
@@ -259,11 +259,11 @@ correct/10 and avg cycles:
 
 | # | config | build knobs | expected cycles |
 |---|--------|-------------|------------------|
-| 1 | FP32 | `model_data_fp32.h`, ref tree, no `CMSIS_NN` | ~140,246 |
-| 2 | INT8 plain | `model_data.h`, ref tree, no `CMSIS_NN` | ~180,728 |
-| 3 | INT8 + CMSIS-NN | `model_data.h`, cmsisnn tree, `CMSIS_NN` | ~83,807 |
-| 4 | + on-board plain-C FFT | rung 3 + `raw_vectors.h`, no `FE_USE_CMSIS` | FFT ~338,114 |
-| 5 | + on-board CMSIS-DSP FFT | rung 4 + `FE_USE_CMSIS` + `cmsis-dsp/` | FFT ~109,210 |
+| 1 | FP32 | `model_data_fp32.h`, ref tree, no `CMSIS_NN` | ~140,437 |
+| 2 | INT8 plain | `model_data.h`, ref tree, no `CMSIS_NN` | ~179,889 |
+| 3 | INT8 + CMSIS-NN | `model_data.h`, cmsisnn tree, `CMSIS_NN` | ~83,414 |
+| 4 | + on-board plain-C FFT | rung 3 + `raw_vectors.h`, no `FE_USE_CMSIS` | FFT ~334,213 |
+| 5 | + on-board CMSIS-DSP FFT | rung 4 + `FE_USE_CMSIS` + `cmsis-dsp/` | FFT ~110,693 |
 
 **How to switch between rungs.** All of this happens inside the
 [tinyml-anomaly-psoc-c3m5-fw](https://github.com/xucenying/tinyml-anomaly-psoc-c3m5-fw)
@@ -281,7 +281,7 @@ above shows *what* changes; here's exactly *where*:
 | 2 | (same as rung 1, no change) | (same as rung 1) | `#include "model_data.h"` (back to INT8); `#define INFERENCE_ONLY 1` |
 | 3 | `firmware/tflm-tree-cmsisnn/` → `tflite-micro/` (replaces the ref tree) | add `CMSIS_NN` to `DEFINES+=` | `#include "model_data.h"` (unchanged); `#define INFERENCE_ONLY 1` |
 | 4 | (same tree as rung 3, no change) | keep `CMSIS_NN`; make sure `FE_USE_CMSIS` is **not** listed | (unchanged from rung 3); `#define INFERENCE_ONLY 0` — this turns on `fft_selftest.h` + the live-stream code |
-| 5 | (same tree) **plus** `firmware/cmsis-dsp/` → `cmsis-dsp/` | add `FE_USE_CMSIS` to `DEFINES+=`, plus the CMSIS-DSP block (`CY_IGNORE+=cmsis-dsp`, its `SOURCES`/`INCLUDES`, and the 3-table trim `DEFINES` — see the CMSIS-DSP integration notes above) | (unchanged from rung 4) |
+| 5 | (same tree) **plus** `firmware/cmsis-dsp/` → `cmsis-dsp/` | add `FE_USE_CMSIS` to `DEFINES+=` | (unchanged from rung 4) |
 
 After changing all three things for a rung: `make clean && make build && make
 program`, then read the results off the serial terminal. **Heads up:** the
@@ -341,9 +341,9 @@ bug, no `INCLUDES` means the compiler can't find TFLM at all.
 just the 8 source files the 1024-point real FFT needs — used by
 `firmware/features.h` when built with `-DFE_USE_CMSIS` to swap in
 `arm_rfft_fast_f32` in place of the plain-C radix-2 FFT. Measured on the
-C3M5 @ 180 MHz: plain-C FFT 338,114 cyc (1,878 µs) → CMSIS-DSP 109,210 cyc
-(607 µs) = **3.1×**; full on-chip pipeline (FFT + CMSIS-NN inference) **2.2×**
-(~2,356 µs → ~1,082 µs).
+C3M5 @ 180 MHz: plain-C FFT 334,213 cyc (1,856 µs) → CMSIS-DSP 110,693 cyc
+(614 µs) = **3.0×**; full on-chip pipeline (FFT + CMSIS-NN inference) **2.1×**
+(~2,327 µs → ~1,086 µs).
 
 Source files kept (`Source/`): `TransformFunctions` —
 `arm_rfft_fast_f32.c`, `arm_rfft_fast_init_f32.c`, `arm_cfft_f32.c`,
@@ -378,8 +378,46 @@ tries to compile. That's why only this trimmed subset is vendored, and why
 `deps/CMSIS-DSP.mtb` must **not** be present — a `.mtb` file re-pulls the
 full upstream library into `mtb_shared/` and reintroduces the broken build.
 
-**Flash and validate on the board.** With the ModusToolbox project pointed at
-the tree and model header you want to test, build and program:
+**Build config: how `-O2` and the FPU are set.** All benchmark numbers in
+this README are measured with `-O2` and the hardware FPU active. To set
+these yourself in a ModusToolbox project's `Makefile`, edit the "Advanced
+Configuration" section:
+
+```make
+# Select softfp or hardfp floating point. Default is softfp.
+VFP_SELECT=softfp        # enables the hardware FPU (fpv5-sp-d16 on this core)
+                          # under the softfp calling convention - this line
+                          # already defaults to softfp in a fresh MTB project,
+                          # just don't blank it out or set it to "none"
+
+# Additional / custom C / C++ compiler flags:
+CFLAGS+=-O2
+CXXFLAGS+=-O2
+```
+
+(In this repo's own firmware `Makefile`, these lines are already present —
+see `CXXFLAGS+=` / `CFLAGS+=` / `VFP_SELECT=` — so you don't need to add them
+yourself if you're building this project as-is; this is for reference if
+you're setting up a similar project from scratch.)
+
+`CONFIG=Release` (also in the Makefile) sets a base optimization of `-Os`,
+but since the `CFLAGS+=`/`CXXFLAGS+=` lines above are appended *after* that,
+`-O2` ends up later on the actual compiler command line and wins (GCC always
+uses whichever `-O` flag appears last). Verified directly from a real build:
+running `make build VERBOSE=1` and inspecting the printed compiler command
+shows `-Os ... -O2` (confirming `-O2` wins) and
+`-mfloat-abi=softfp -mfpu=fpv5-sp-d16` (confirming the hardware FPU is
+active, not software float emulation).
+
+**Use the terminal, not the IDE's Debug/Release selector.** The Eclipse IDE
+for ModusToolbox has its *own* active build configuration dropdown (Project →
+Build Configurations → Set Active), separate from the Makefile's
+`CONFIG=Release` line — and it can silently disagree with it if left on
+"Debug." Building from the IDE's buttons uses whichever the IDE's own
+selector says, not necessarily what's in the Makefile. **Always build and
+flash from a terminal** instead, so the settings actually used are guaranteed
+to be exactly what's written in the Makefile — no separate IDE selector to
+second-guess:
 
 ```bash
 make clean
@@ -387,11 +425,28 @@ make build
 make program          # flashes the board
 ```
 
-Open a serial terminal at 115200 8N1. On boot, the firmware self-tests: raw
-window → on-board FFT → classify, then a feature-vector inference test,
-printing per-class PASS/FAIL and DWT cycle counts. For the CMSIS-NN +
-CMSIS-DSP build you should see ~83,807 inference cycles and ~109,210 FFT
-cycles, matching the tables above.
+On Windows, run these from ModusToolbox's own **modus-shell** (search for it
+in the Start menu) rather than plain PowerShell or Command Prompt — it comes
+with `make`, `arm-none-eabi-gcc`, and the rest of the toolchain already on
+its PATH, so you don't have to locate and add them yourself.
+
+**Flash and validate on the board.** With the ModusToolbox project pointed at
+the tree and model header you want to test, run the three commands above.
+All results (PASS/FAIL, predictions, cycle counts) are printed by the
+firmware itself and sent back over the board's **UART** (via `printf`,
+retargeted to UART by the `retarget-io` middleware) — open a serial terminal
+on the board's COM port at **921600 baud, 8N1** (8 data bits, no parity, 1
+stop bit) to read them. The board's UART baud rate is set project-wide (not
+per-test) via ModusToolbox's Device Configurator (`make config`, in
+`bsps/TARGET_APP_KIT_PSC3M5_EVK/config/design.modus`) — 921600 was chosen so
+the same rate works for both these self-tests and the live-streaming demo
+below, which needs it to keep up with the 12 kHz ADC data rate. On boot, the firmware
+self-tests: raw window → on-board FFT → classify, then a feature-vector
+inference test, printing per-class PASS/FAIL and DWT cycle counts. For the
+CMSIS-NN + CMSIS-DSP build you should see ~84,788 inference cycles and
+~110,693 FFT cycles, matching the tables above. Full raw console output from
+a clean run of all five flash configs plus the live demo is in the appendix
+of [`benchmarks/results.md`](benchmarks/results.md).
 
 ### 3. Live demo — continuous ADC streaming (`replay/`)
 
@@ -411,7 +466,9 @@ CWRU test region ─512-sample ADC chunks─►  UART/TCP  ──►  C3M5 (or b
 ```
 
 At 12 kHz a chunk is 512/12000 = 42.7 ms of audio-rate data (24 KB/s), which
-needs **~921600 baud** to keep up in real time (115200 can't).
+needs **~921600 baud** to keep up in real time (115200 can't) — this is why
+the board's UART is configured for 921600 baud project-wide (see "Flash and
+validate on the board" above), not just for this demo.
 
 **No hardware needed:**
 
@@ -419,24 +476,44 @@ needs **~921600 baud** to keep up in real time (115200 can't).
 python ml/preprocess.py     # one-time: builds files.json / classes.json
 cd replay
 python -m venv .venv && . .venv/bin/activate     # Windows: .venv\Scripts\activate
-pip install "numpy<2" tflite-runtime scipy         # + pyserial for a real board
+pip install -r requirements.txt   # numpy<2, tflite-runtime, scipy, pyserial
 python stream.py --sim
 ```
 
 Expect one `WARM` line while the first window fills, then healthy windows
 classified `normal`, a fault injected mid-stream, `ALERT` latching ~2–3 chunks
-later, and clearing once the fault passes:
+later, and clearing once the fault passes. This is real captured output from
+the actual board (`--serial COM5 --baud 921600`, 2026-08-07):
 
 ```
 chunk  streamed      pred  conf  fft_cyc  inf_cyc  state
+--------------------------------------------------------
     0    normal        --    --       --       --  WARM
-    7    normal    normal   99%   109359    84137  ok
-    8    or_021    or_021   99%   109213    83892  ok (fault injected)
-   10    or_021    or_021   99%   109342    83841  ALERT  <== ALERT
+    1    normal    normal   99%   112286    82960  ok
+    7    normal    normal   99%   112329    82969  ok
+    8    or_021    or_021   99%   112320    84396  ok (fault injected)
+    9    or_021    or_021   99%   112329    84889  ok
+      board| *** ALERT: or_021 (99%) ***
+   10    or_021    or_021   99%   112329    84344  ALERT  <== ALERT
    ...
+   27    or_021    or_021   99%   112341    85276  ALERT  <== ALERT
+   28    normal    or_021   99%   112347    84864  ALERT  <== ALERT
+   29    normal    normal   99%   112353    82958  ALERT  <== ALERT
+   ...
+   33    normal    normal   99%   112347    82885  ok
+   34    normal    normal   99%   112344    82911  ok
+   35    normal    normal   99%   112326    82943  ok
+--------------------------------------------------------
+
+chunks sent: 36   classified windows: 35   accuracy: 34/35 = 97.1%
 fault injected at chunk 8 (or_021); ALERT at chunk 10  ->  latency 2 chunks (~85 ms @ 12 kHz)
 false alerts during healthy stretch: 0
 ```
+
+(The one miss, chunk 28, is the alert hysteresis coasting through the first
+`normal` chunk right after the fault ends — not a misclassification of a
+steady-state signal. Full unedited capture in the appendix of
+[`benchmarks/results.md`](benchmarks/results.md).)
 
 `python test_e2e.py` (still inside `replay/`) runs a no-sockets in-process
 check of the whole chain. Try other faults: `python stream.py --sim --fault
@@ -444,7 +521,8 @@ ir_014 --normal 10 --fault-chunks 25 --tail 10`.
 
 **On real hardware:** flash `firmware/main.cpp` (it runs the self-tests, then
 enters the ADC-stream loop automatically), set the board UART to **921600 baud**,
-find its serial port, then (still inside `replay/`):
+find its serial port, then (still inside `replay/`, `pyserial` is already
+covered by `requirements.txt` above):
 
 ```bash
 python stream.py --serial COM5 --baud 921600 --interval 0.0427

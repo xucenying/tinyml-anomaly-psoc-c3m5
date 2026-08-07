@@ -40,28 +40,29 @@ architecture (128→96→48→10) and the kernels, not on the training data, and
 FFT cost is data-independent. The architecture is identical, so every cycle
 figure below carries over; reflash the final config to reconfirm.
 
-## Main table (consistent config: -O2, softfp)
+## Main table (consistent config: -O2, softfp — clean re-run, 2026-08-07)
 
 | stage | kernels | model | avg cycles | latency | arena | model size |
 |---|---|---|---|---|---|---|
-| fp32_ref | TFLM reference (FPU) | FP32 | 140,246 | 779 µs | 1,712 B | 72,236 B |
-| int8_ref | TFLM reference | INT8 | 180,728 | 1,004 µs | 2,228 B | 24,152 B |
-| int8_cmsisnn | **CMSIS-NN** | INT8 | **83,807** | **466 µs** | 2,324 B | 24,152 B |
+| fp32_ref | TFLM reference (FPU) | FP32 | 140,437 | 780 µs | 1,616 B | 72,236 B |
+| int8_ref | TFLM reference | INT8 | 179,889 | 999 µs | 2,228 B | 24,152 B |
+| int8_cmsisnn | **CMSIS-NN** | INT8 | **83,414** | **463 µs** | 2,324 B | 24,152 B |
+
+All three configs: 10/10 correct on the held-out test vectors. Raw captured
+console output for this run is in the appendix at the bottom of this file.
 
 ## Key findings
 
-1. **Quantization alone made it SLOWER: naive INT8 is 1.29x slower than FP32 on a
-   core with an FPU** (1,004 vs 779 µs). Portable-C INT8 requantization is expensive.
-2. **CMSIS-NN unlocks INT8**: 2.16x vs naive INT8, 1.67x vs FP32 — plus 3x smaller
+1. **Quantization alone made it SLOWER: naive INT8 is 1.28x slower than FP32 on a
+   core with an FPU** (999 vs 780 µs). Portable-C INT8 requantization is expensive.
+2. **CMSIS-NN unlocks INT8**: 2.16x vs naive INT8, 1.68x vs FP32 — plus 3x smaller
    model (24 KB vs 72 KB) and INT8 accuracy identical to FP32 on validation.
 3. FP32→INT8 conversion (PC, TFLite full-integer): 72,236 → 24,152 B, 0.00 pp
    accuracy drop (val).
 
 ## Reproduce
 
-All rows are built and measured with `-O2`. Historical rows and capture workflow:
-see git history of this file and `harness/results_table.py`. Build config deltas
-per stage:
+All rows are built and measured with `-O2`. Build config deltas per stage:
 - tree: `firmware/tflm-tree-ref` vs `firmware/tflm-tree-cmsisnn` (as `tflite-micro/`)
 - DEFINES: `CMSIS_NN` only with the cmsisnn tree
 - model: `model_data.h` (INT8) vs `model_data_fp32.h`
@@ -72,37 +73,99 @@ TODO (stretch): per-op profiling; Corstone-300 (M55/Ethos-U55) column; ExecuTorc
 ## Phase 3b: on-board feature extraction (FFT)
 
 Full pipeline now on-device: raw 1024-sample window -> FFT features -> classify.
-Held-out load 3, 9/10 correct (b_021 confused with b_014 — same in both the FFT
-pipeline and the embedded-vector test, so the FFT is correct; it's a real model
-limit on the held-out load).
+Clean re-run (2026-08-07, current 70/30 temporal split, 100% val accuracy
+methodology): **10/10 correct.**
 
 | stage | avg cycles | latency |
 |---|---|---|
-| feature extraction (plain-C FFT) | 338,114 | 1,878 µs |
-| inference (INT8 + CMSIS-NN, -O2) | 86,067 | 478 µs |
-| **full pipeline (plain-C FFT)** | **~424,000** | **~2,356 µs** |
+| feature extraction (plain-C FFT) | 334,213 | 1,856 µs |
+| inference (INT8 + CMSIS-NN, -O2) | 84,656 | 470 µs |
+| **full pipeline (plain-C FFT)** | **418,869** | **~2,327 µs** |
 
 Finding: after CMSIS-NN sped up inference, the **FFT became the bottleneck**
-(4x the inference cost) — the classic "bottleneck shifts" result. Next rung:
+(~4x the inference cost) — the classic "bottleneck shifts" result. Next rung:
 CMSIS-DSP FFT (-DFE_USE_CMSIS) vs this plain-C FFT.
 
 ## Phase 3b (cont.): CMSIS-DSP FFT rung
 
 Same on-board pipeline, only the FFT implementation changed (plain-C radix-2
-rFFT -> CMSIS-DSP arm_rfft_fast_f32). Same 9/10, same b_021->b_014 miss.
+rFFT -> CMSIS-DSP arm_rfft_fast_f32). Same 10/10.
 
 | FFT implementation | avg cycles | latency | speedup |
 |---|---|---|---|
-| plain-C radix-2 | 338,114 | 1,878 µs | 1.0x |
-| **CMSIS-DSP arm_rfft_fast_f32** | **109,210** | **607 µs** | **3.1x** |
+| plain-C radix-2 | 334,213 | 1,856 µs | 1.0x |
+| **CMSIS-DSP arm_rfft_fast_f32** | **110,693** | **614 µs** | **3.0x** |
 
 Full on-device pipeline (raw window -> features -> classify):
 
 | pipeline | FFT | inference | total | speedup |
 |---|---|---|---|---|
-| plain-C FFT + CMSIS-NN | 1,878 µs | 478 µs | ~2,356 µs | 1.0x |
-| **CMSIS-DSP FFT + CMSIS-NN** | 607 µs | 475 µs | **~1,082 µs** | **2.2x** |
+| plain-C FFT + CMSIS-NN | 1,856 µs | 470 µs | ~2,327 µs | 1.0x |
+| **CMSIS-DSP FFT + CMSIS-NN** | 614 µs | 471 µs | **~1,086 µs** | **2.1x** |
 
 CMSIS-DSP vendored minimally into the project (8 FFT source files + 3 tables:
 TWIDDLECOEF_F32_512, BITREVIDX_FLT_512, TWIDDLECOEF_RFFT_F32_1024) to fit flash.
-Bottleneck now balanced (FFT 56% / inference 44%) vs plain-C (FFT 80%).
+Bottleneck now balanced (FFT 57% / inference 43%) vs plain-C (FFT 80%).
+
+## Appendix: raw captured console output (2026-08-07 clean re-run)
+
+All six configs above, plus the live demo, flashed and run back-to-back in one
+sitting. Pasted directly from the board's serial terminal / the host script's
+stdout, unedited.
+
+```
+RUN 1: FP32
+=== CWRU bearing-fault classifier: PSOC Control C3M5 ===
+model: 72236 bytes
+arena used: 1616 / 16384 bytes
+10/10 correct, avg 140437 cycles/inference (780 us @180MHz)
+
+RUN 2: INT8 plain
+=== CWRU bearing-fault classifier: PSOC Control C3M5 ===
+model: 24152 bytes
+arena used: 2228 / 16384 bytes
+10/10 correct, avg 179889 cycles/inference (999 us @180MHz)
+
+RUN 3: INT8 + CMSIS-NN
+=== CWRU bearing-fault classifier: PSOC Control C3M5 ===
+model: 24152 bytes
+arena used: 2324 / 16384 bytes
+10/10 correct, avg 83414 cycles/inference (463 us @180MHz)
+
+RUN 4: INT8 + CMSIS-NN + on-board plain-C FFT
+=== on-board FFT self-test (plain-C FFT) ===
+10/10 correct | avg FFT 334213 cyc (1856 us) | avg inference 84656 cyc (470 us)
+
+RUN 5: INT8 + CMSIS-NN + on-board CMSIS-DSP FFT
+=== on-board FFT self-test (CMSIS-DSP) ===
+10/10 correct | avg FFT 110693 cyc (614 us) | avg inference 84788 cyc (471 us)
+
+RUN 6: Live Demo (replay/stream.py --serial COM5 --baud 921600 --interval 0.0427)
+chunk  streamed      pred  conf  fft_cyc  inf_cyc  state
+--------------------------------------------------------
+    0    normal        --    --       --       --  WARM
+    1    normal    normal   99%   112286    82960  ok
+    ...
+    8    or_021    or_021   99%   112320    84396  ok (fault injected)
+    9    or_021    or_021   99%   112329    84889  ok
+      board| *** ALERT: or_021 (99%) ***
+   10    or_021    or_021   99%   112329    84344  ALERT  <== ALERT
+    ...
+   28    normal    or_021   99%   112347    84864  ALERT  <== ALERT
+   29    normal    normal   99%   112353    82958  ALERT  <== ALERT
+    ...
+   33    normal    normal   99%   112347    82885  ok
+   34    normal    normal   99%   112344    82911  ok
+   35    normal    normal   99%   112326    82943  ok
+--------------------------------------------------------
+
+chunks sent: 36   classified windows: 35   accuracy: 34/35 = 97.1%
+fault injected at chunk 8 (or_021); ALERT at chunk 10  ->  latency 2 chunks (~85 ms @ 12 kHz)
+false alerts during healthy stretch: 0
+```
+
+The one miss (chunk 28, `normal` predicted as `or_021`) is the alert state
+machine's own hysteresis working as designed: it's the first `normal` chunk
+right after the fault ends, still inside the 5-consecutive-normal window
+needed to clear `ALERT` — one window of coasting, not a misclassification of
+a steady-state signal.

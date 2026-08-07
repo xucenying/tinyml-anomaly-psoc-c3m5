@@ -1,0 +1,279 @@
+RUN 1: FP32
+
+Calculating memory consumption: PSC3M5FDS2AFQ1 GCC_ARM
+
+
+   ---------------------------------------------------- 
+  | Section Name         |  Address      |  Size       | 
+   ---------------------------------------------------- 
+  | .text                |  0x12000000   |  140308     | 
+  | .ARM.exidx           |  0x12022414   |  8          | 
+  | .copy.table          |  0x1202241c   |  24         | 
+  | .zero.table          |  0x12022434   |  8          | 
+  | .ramVectors          |  0x34000000   |  624        | 
+  | .data                |  0x34000270   |  1120       | 
+  | .noinit              |  0x340006d0   |  120        | 
+  | .bss                 |  0x34000750   |  17512      | 
+  | .heap                |  0x34004bb8   |  42056      | 
+  | .cy_sharedmem        |  0x3400f800   |  8          | 
+   ---------------------------------------------------- 
+
+  Total Internal Flash (Available)          262144     
+  Total Internal Flash (Utilized)           0  
+
+=== CWRU bearing-fault classifier: PSOC Control C3M5 ===
+model: 72236 bytes
+arena used: 1616 / 16384 bytes
+
+[PASS] true=b_007   pred=b_007   conf= 99%  cycles=140812 (782 us)
+[PASS] true=b_014   pred=b_014   conf= 99%  cycles=140352 (779 us)
+[PASS] true=b_021   pred=b_021   conf= 99%  cycles=140352 (779 us)
+[PASS] true=ir_007  pred=ir_007  conf= 99%  cycles=140381 (779 us)
+[PASS] true=ir_014  pred=ir_014  conf= 99%  cycles=140440 (780 us)
+[PASS] true=ir_021  pred=ir_021  conf= 99%  cycles=140440 (780 us)
+[PASS] true=normal  pred=normal  conf= 99%  cycles=140352 (779 us)
+[PASS] true=or_007  pred=or_007  conf= 99%  cycles=140523 (780 us)
+[PASS] true=or_014  pred=or_014  conf= 99%  cycles=140369 (779 us)
+[PASS] true=or_021  pred=or_021  conf= 99%  cycles=140352 (779 us)
+
+10/10 correct, avg 140437 cycles/inference (780 us @180MHz)
+=== classifier test complete ===
+
+
+
+---------------------------------------------------------------------------------------------------------
+
+RUN 2: INT8 plain
+
+Calculating memory consumption: PSC3M5FDS2AFQ1 GCC_ARM
+
+
+   ---------------------------------------------------- 
+  | Section Name         |  Address      |  Size       | 
+   ---------------------------------------------------- 
+  | .text                |  0x12000000   |  92228      | 
+  | .ARM.exidx           |  0x12016844   |  8          | 
+  | .copy.table          |  0x1201684c   |  24         | 
+  | .zero.table          |  0x12016864   |  8          | 
+  | .ramVectors          |  0x34000000   |  624        | 
+  | .data                |  0x34000270   |  1120       | 
+  | .noinit              |  0x340006d0   |  120        | 
+  | .bss                 |  0x34000750   |  17512      | 
+  | .heap                |  0x34004bb8   |  42056      | 
+  | .cy_sharedmem        |  0x3400f800   |  8          | 
+   ---------------------------------------------------- 
+
+  Total Internal Flash (Available)          262144     
+  Total Internal Flash (Utilized)           0   
+
+
+=== CWRU bearing-fault classifier: PSOC Control C3M5 ===
+model: 24152 bytes
+arena used: 2228 / 16384 bytes
+
+[PASS] true=b_007   pred=b_007   conf= 99%  cycles=180849 (1004 us)
+[PASS] true=b_014   pred=b_014   conf= 99%  cycles=179829 (999 us)
+[PASS] true=b_021   pred=b_021   conf= 99%  cycles=179944 (999 us)
+[PASS] true=ir_007  pred=ir_007  conf= 99%  cycles=180454 (1002 us)
+[PASS] true=ir_014  pred=ir_014  conf= 99%  cycles=180421 (1002 us)
+[PASS] true=ir_021  pred=ir_021  conf= 99%  cycles=180403 (1002 us)
+[PASS] true=normal  pred=normal  conf= 99%  cycles=178068 (989 us)
+[PASS] true=or_007  pred=or_007  conf= 99%  cycles=178982 (994 us)
+[PASS] true=or_014  pred=or_014  conf= 99%  cycles=180473 (1002 us)
+[PASS] true=or_021  pred=or_021  conf= 99%  cycles=179468 (997 us)
+
+10/10 correct, avg 179889 cycles/inference (999 us @180MHz)
+=== classifier test complete ===
+
+
+-----------------------------------------------------------------------------------------------------------------
+
+RUN3: INT8 + CMSIS-NN
+
+Calculating memory consumption: PSC3M5FDS2AFQ1 GCC_ARM
+
+
+   ---------------------------------------------------- 
+  | Section Name         |  Address      |  Size       | 
+   ---------------------------------------------------- 
+  | .text                |  0x12000000   |  106964     | 
+  | .ARM.exidx           |  0x1201a1d4   |  8          | 
+  | .copy.table          |  0x1201a1dc   |  24         | 
+  | .zero.table          |  0x1201a1f4   |  8          | 
+  | .ramVectors          |  0x34000000   |  624        | 
+  | .data                |  0x34000270   |  1120       | 
+  | .noinit              |  0x340006d0   |  120        | 
+  | .bss                 |  0x34000750   |  17512      | 
+  | .heap                |  0x34004bb8   |  42056      | 
+  | .cy_sharedmem        |  0x3400f800   |  8          | 
+   ---------------------------------------------------- 
+
+  Total Internal Flash (Available)          262144     
+  Total Internal Flash (Utilized)           0      
+
+
+=== CWRU bearing-fault classifier: PSOC Control C3M5 ===
+model: 24152 bytes
+arena used: 2324 / 16384 bytes
+
+[PASS] true=b_007   pred=b_007   conf= 99%  cycles=84648 (470 us)
+[PASS] true=b_014   pred=b_014   conf= 99%  cycles=83303 (462 us)
+[PASS] true=b_021   pred=b_021   conf= 99%  cycles=83306 (462 us)
+[PASS] true=ir_007  pred=ir_007  conf= 99%  cycles=84370 (468 us)
+[PASS] true=ir_014  pred=ir_014  conf= 99%  cycles=83951 (466 us)
+[PASS] true=ir_021  pred=ir_021  conf= 99%  cycles=84051 (466 us)
+[PASS] true=normal  pred=normal  conf= 99%  cycles=81645 (453 us)
+[PASS] true=or_007  pred=or_007  conf= 99%  cycles=82434 (457 us)
+[PASS] true=or_014  pred=or_014  conf= 99%  cycles=83724 (465 us)
+[PASS] true=or_021  pred=or_021  conf= 99%  cycles=82714 (459 us)
+
+10/10 correct, avg 83414 cycles/inference (463 us @180MHz)
+=== classifier test complete ===
+
+
+----------------------------------------------------------------------------------------------------------------------------
+RUN 4 : INT8 + CMSIS-NN + on-board plain-C FFT
+
+Calculating memory consumption: PSC3M5FDS2AFQ1 GCC_ARM
+
+
+   ---------------------------------------------------- 
+  | Section Name         |  Address      |  Size       | 
+   ---------------------------------------------------- 
+  | .text                |  0x12000000   |  149572     | 
+  | .ARM.exidx           |  0x12024844   |  8          | 
+  | .copy.table          |  0x1202484c   |  24         | 
+  | .zero.table          |  0x12024864   |  8          | 
+  | .ramVectors          |  0x34000000   |  624        | 
+  | .data                |  0x34000270   |  1120       | 
+  | .noinit              |  0x340006d0   |  120        | 
+  | .bss                 |  0x34000750   |  44136      | 
+  | .heap                |  0x3400b3b8   |  15432      | 
+  | .cy_sharedmem        |  0x3400f800   |  8          | 
+   ---------------------------------------------------- 
+
+  Total Internal Flash (Available)          262144     
+  Total Internal Flash (Utilized)           0    
+
+
+=== CWRU bearing-fault classifier: PSOC Control C3M5 ===
+model: 24152 bytes
+arena used: 2324 / 16384 bytes
+
+
+=== on-board FFT self-test (plain-C FFT) ===
+  DBG feat[0..4]= -0.3356 -0.8342 0.1437 0.6092 -0.0956
+[PASS] true=b_007   pred=b_007    fft=333325 inf=85079 cyc
+[PASS] true=b_014   pred=b_014    fft=334318 inf=84767 cyc
+[PASS] true=b_021   pred=b_021    fft=334312 inf=84796 cyc
+[PASS] true=ir_007  pred=ir_007   fft=334315 inf=85237 cyc
+[PASS] true=ir_014  pred=ir_014   fft=334306 inf=85223 cyc
+[PASS] true=ir_021  pred=ir_021   fft=334300 inf=85263 cyc
+[PASS] true=normal  pred=normal   fft=334345 inf=82807 cyc
+[PASS] true=or_007  pred=or_007   fft=334303 inf=83894 cyc
+[PASS] true=or_014  pred=or_014   fft=334309 inf=85269 cyc
+[PASS] true=or_021  pred=or_021   fft=334306 inf=84233 cyc
+
+10/10 correct | avg FFT 334213 cyc (1856 us) | avg inference 84656 cyc (470 us)
+=== FFT self-test complete ===
+
+=== ADC stream: 512-sample chunks -> sliding 1024-window -> FFT -> classify ===
+
+
+-----------------------------------------------------------------------------------------------
+
+
+RUN 5: INT8 + CMSIS-NN +  on-board CMSIS-DSP FFT
+
+
+   ---------------------------------------------------- 
+  | Section Name         |  Address      |  Size       | 
+   ---------------------------------------------------- 
+  | .text                |  0x12000000   |  161924     | 
+  | .ARM.exidx           |  0x12027884   |  8          | 
+  | .copy.table          |  0x1202788c   |  24         | 
+  | .zero.table          |  0x120278a4   |  8          | 
+  | .ramVectors          |  0x34000000   |  624        | 
+  | .data                |  0x34000270   |  1120       | 
+  | .noinit              |  0x340006d0   |  120        | 
+  | .bss                 |  0x34000750   |  40064      | 
+  | .heap                |  0x3400a3d0   |  19504      | 
+  | .cy_sharedmem        |  0x3400f800   |  8          | 
+   ---------------------------------------------------- 
+
+  Total Internal Flash (Available)          262144     
+  Total Internal Flash (Utilized)           0      
+
+
+=== CWRU bearing-fault classifier: PSOC Control C3M5 ===
+model: 24152 bytes
+arena used: 2324 / 16384 bytes
+
+
+=== on-board FFT self-test (CMSIS-DSP) ===
+  DBG feat[0..4]= -0.3356 -0.8342 0.1437 0.6092 -0.0956
+[PASS] true=b_007   pred=b_007    fft=110659 inf=84921 cyc
+[PASS] true=b_014   pred=b_014    fft=110698 inf=84923 cyc
+[PASS] true=b_021   pred=b_021    fft=110701 inf=84953 cyc
+[PASS] true=ir_007  pred=ir_007   fft=110695 inf=85410 cyc
+[PASS] true=ir_014  pred=ir_014   fft=110686 inf=85380 cyc
+[PASS] true=ir_021  pred=ir_021   fft=110689 inf=85436 cyc
+[PASS] true=normal  pred=normal   fft=110725 inf=82980 cyc
+[PASS] true=or_007  pred=or_007   fft=110692 inf=84067 cyc
+[PASS] true=or_014  pred=or_014   fft=110698 inf=85426 cyc
+[PASS] true=or_021  pred=or_021   fft=110695 inf=84390 cyc
+
+10/10 correct | avg FFT 110693 cyc (614 us) | avg inference 84788 cyc (471 us)
+=== FFT self-test complete ===
+
+=== ADC stream: 512-sample chunks -> sliding 1024-window -> FFT -> classify ===
+
+------------------------------------------------------------------------------------------------
+
+RUN 6: Live Demo
+
+(.venv) PS C:\Users\User\Desktop\work\claude-cowork\test\tinyml-anomaly-psoc-c3m5\replay> python stream.py --serial COM5 --baud 921600 --interval 0.0427
+chunk  streamed      pred  conf  fft_cyc  inf_cyc  state
+--------------------------------------------------------
+    0    normal        --    --       --       --  WARM
+    1    normal    normal   99%   112286    82960  ok
+    2    normal    normal   99%   112341    82917  ok
+    3    normal    normal   99%   112347    82943  ok
+    4    normal    normal   99%   112350    82917  ok
+    5    normal    normal   99%   112344    82943  ok
+    6    normal    normal   99%   112356    83430  ok
+    7    normal    normal   99%   112329    82969  ok
+    8    or_021    or_021   99%   112320    84396  ok (fault injected)
+    9    or_021    or_021   99%   112329    84889  ok
+      board| *** ALERT: or_021 (99%) ***
+   10    or_021    or_021   99%   112329    84344  ALERT  <== ALERT
+   11    or_021    or_021   99%   112344    83019  ALERT  <== ALERT
+   12    or_021    or_021   99%   112341    84344  ALERT  <== ALERT
+   13    or_021    or_021   99%   112332    84883  ALERT  <== ALERT
+   14    or_021    or_021   99%   112320    82474  ALERT  <== ALERT
+   15    or_021    or_021   99%   112329    84396  ALERT  <== ALERT
+   16    or_021    or_021   99%   112344    84376  ALERT  <== ALERT
+   17    or_021    or_021   99%   112329    84402  ALERT  <== ALERT
+   18    or_021    or_021   99%   112353    83422  ALERT  <== ALERT
+   19    or_021    or_021   99%   112353    84370  ALERT  <== ALERT
+   20    or_021    or_021   99%   112344    84361  ALERT  <== ALERT
+   21    or_021    or_021   99%   112326    83454  ALERT  <== ALERT
+   22    or_021    or_021   99%   112347    82961  ALERT  <== ALERT
+   23    or_021    or_021   99%   112335    84915  ALERT  <== ALERT
+   24    or_021    or_021   99%   112353    83909  ALERT  <== ALERT
+   25    or_021    or_021   99%   112335    84376  ALERT  <== ALERT
+   26    or_021    or_021   99%   112335    83883  ALERT  <== ALERT
+   27    or_021    or_021   99%   112341    85276  ALERT  <== ALERT
+   28    normal    or_021   99%   112347    84864  ALERT  <== ALERT
+   29    normal    normal   99%   112353    82958  ALERT  <== ALERT
+   30    normal    normal   99%   112353    82917  ALERT  <== ALERT
+   31    normal    normal   99%   112308    83422  ALERT  <== ALERT
+   32    normal    normal   99%   112332    82911  ALERT  <== ALERT
+   33    normal    normal   99%   112347    82885  ok
+   34    normal    normal   99%   112344    82911  ok
+   35    normal    normal   99%   112326    82943  ok
+--------------------------------------------------------
+
+chunks sent: 36   classified windows: 35   accuracy: 34/35 = 97.1%
+fault injected at chunk 8 (or_021); ALERT at chunk 10  ->  latency 2 chunks (~85 ms @ 12 kHz)
+false alerts during healthy stretch: 0
