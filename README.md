@@ -546,10 +546,11 @@ steady-state signal.)
 check of the whole chain. Try other faults: `python stream.py --sim --fault
 ir_014 --normal 10 --fault-chunks 25 --tail 10`.
 
-**On real hardware:** flash `firmware/main.cpp` (it runs the self-tests, then
-enters the ADC-stream loop automatically), set the board UART to **921600 baud**,
-find its serial port, then (still inside `replay/`, `pyserial` is already
-covered by `requirements.txt` above):
+**On real hardware:** flash the board with rung 4 or 5 (on-board FFT,
+`INFERENCE_ONLY 0` — see "How to switch between rungs" above; rung 5 is the
+default checked-in config). It runs the self-tests, then enters the ADC-stream
+loop automatically. Find its serial port, then (still inside `replay/`,
+`pyserial` is already covered by `requirements.txt` above):
 
 ```bash
 python stream.py --serial COM5 --baud 921600 --interval 0.0427
