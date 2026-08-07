@@ -508,7 +508,7 @@ validate on the board" above), not just for this demo.
    python ml/preprocess.py     # builds files.json / classes.json
    cd replay
    python -m venv .venv && . .venv/bin/activate     # Windows: .venv\Scripts\activate
-   pip install -r requirements.txt   # numpy, scipy, pyserial
+   python -m pip install -r requirements.txt   # numpy, scipy, pyserial
    ```
 4. **Run the stream** (still inside `replay/`, port from step 2):
    ```bash
