@@ -221,8 +221,9 @@ result.txt     raw captured console output, all benchmark configs + live demo (2
 ### 1. Build the model (`ml/`)
 
 Needs a machine with TensorFlow — only for this step. Reading the code and
-running the live demo (step 4, below) do **not** need TensorFlow; the demo
-uses the lighter `tflite-runtime` package instead.
+running the live demo (step 3, below) do **not** need TensorFlow — all
+inference happens on the board itself, so the host script only needs
+`numpy`/`scipy` (signal processing) and `pyserial` (talking to the board).
 
 ```bash
 cd ml
@@ -507,7 +508,7 @@ validate on the board" above), not just for this demo.
    python ml/preprocess.py     # builds files.json / classes.json
    cd replay
    python -m venv .venv && . .venv/bin/activate     # Windows: .venv\Scripts\activate
-   pip install -r requirements.txt   # numpy<2, tflite-runtime, scipy, pyserial
+   pip install -r requirements.txt   # numpy<2, scipy, pyserial
    ```
 4. **Run the stream** (still inside `replay/`, port from step 2):
    ```bash
