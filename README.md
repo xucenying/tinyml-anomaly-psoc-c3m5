@@ -494,23 +494,25 @@ needs **~921600 baud** to keep up in real time (115200 can't) — this is why
 the board's UART is configured for 921600 baud project-wide (see "Flash and
 validate on the board" above), not just for this demo.
 
-**Setup:**
+**How to run it:**
 
-```bash
-python ml/preprocess.py     # one-time: builds files.json / classes.json
-cd replay
-python -m venv .venv && . .venv/bin/activate     # Windows: .venv\Scripts\activate
-pip install -r requirements.txt   # numpy<2, tflite-runtime, scipy, pyserial
-```
-
-**Running it:** flash the board with rung 4 or 5 (on-board FFT,
-`INFERENCE_ONLY 0` — see "How to switch between rungs" above; rung 5 is the
-default checked-in config). It runs the self-tests, then enters the ADC-stream
-loop automatically. Find its serial port, then (still inside `replay/`):
-
-```bash
-python stream.py --serial COM5 --baud 921600 --interval 0.0427
-```
+1. **Flash the board** with rung 4 or 5 (on-board FFT, `INFERENCE_ONLY 0` —
+   see "How to switch between rungs" above; rung 5 is the default checked-in
+   config). On boot it runs the self-tests, then enters the ADC-stream loop
+   automatically.
+2. **Find the board's serial port** (e.g. `COM5` on Windows, `/dev/ttyACM0`
+   on Linux).
+3. **Set up the host side** (one-time):
+   ```bash
+   python ml/preprocess.py     # builds files.json / classes.json
+   cd replay
+   python -m venv .venv && . .venv/bin/activate     # Windows: .venv\Scripts\activate
+   pip install -r requirements.txt   # numpy<2, tflite-runtime, scipy, pyserial
+   ```
+4. **Run the stream** (still inside `replay/`, port from step 2):
+   ```bash
+   python stream.py --serial COM5 --baud 921600 --interval 0.0427
+   ```
 
 Expect one `WARM` line while the first window fills, then healthy windows
 classified `normal`, a fault injected mid-stream, `ALERT` latching ~2–3 chunks
