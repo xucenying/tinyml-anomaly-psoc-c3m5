@@ -158,8 +158,7 @@ reproduce" step 2) to fit.
 - **Limitation:** this split removes window-overlap leakage, but train and test
   still come from the *same recording, load, and bearing* — separated only in
   time — so it's an **easier** test than a leave-one-load-out split (holding out
-  a whole operating condition entirely), which scored **98.34%**. Full detail in
-  [`benchmarks/results.md`](benchmarks/results.md).
+  a whole operating condition entirely), which scored **98.34%**.
 - **Why leave-one-load-out isn't the main split here:** it's the harder,
   more rigorous benchmark, but it trains on only 3 of the 4 loads and leaves
   the model with no data at all from the held-out load — 25% less training
@@ -193,7 +192,6 @@ reproduce" step 2) to fit.
 ml/            training, preprocessing, INT8 quantization, header export
 firmware/      on-device code: FFT features, TFLM trees (ref & CMSIS-NN), CMSIS-DSP
 replay/        host-side continuous-ADC streaming + fault-injection demo
-benchmarks/    results.md — the full measured tables and method
 00-research-and-plan.md   background, dataset choice, strategy
 ```
 
@@ -445,9 +443,39 @@ below, which needs it to keep up with the 12 kHz ADC data rate. On boot, the fir
 self-tests: raw window → on-board FFT → classify, then a feature-vector
 inference test, printing per-class PASS/FAIL and DWT cycle counts. For the
 CMSIS-NN + CMSIS-DSP build you should see ~84,788 inference cycles and
-~110,693 FFT cycles, matching the tables above. Full raw console output from
-a clean run of all five flash configs plus the live demo is in the appendix
-of [`benchmarks/results.md`](benchmarks/results.md).
+~110,693 FFT cycles, matching the tables above.
+
+**Raw captured console output** — all five flash configs above, flashed and
+run back-to-back in one sitting (2026-08-07), pasted directly from the
+board's serial terminal, unedited:
+
+```
+RUN 1: FP32
+=== CWRU bearing-fault classifier: PSOC Control C3M5 ===
+model: 72236 bytes
+arena used: 1616 / 16384 bytes
+10/10 correct, avg 140437 cycles/inference (780 us @180MHz)
+
+RUN 2: INT8 plain
+=== CWRU bearing-fault classifier: PSOC Control C3M5 ===
+model: 24152 bytes
+arena used: 2228 / 16384 bytes
+10/10 correct, avg 179889 cycles/inference (999 us @180MHz)
+
+RUN 3: INT8 + CMSIS-NN
+=== CWRU bearing-fault classifier: PSOC Control C3M5 ===
+model: 24152 bytes
+arena used: 2324 / 16384 bytes
+10/10 correct, avg 83414 cycles/inference (463 us @180MHz)
+
+RUN 4: INT8 + CMSIS-NN + on-board plain-C FFT
+=== on-board FFT self-test (plain-C FFT) ===
+10/10 correct | avg FFT 334213 cyc (1856 us) | avg inference 84656 cyc (470 us)
+
+RUN 5: INT8 + CMSIS-NN + on-board CMSIS-DSP FFT
+=== on-board FFT self-test (CMSIS-DSP) ===
+10/10 correct | avg FFT 110693 cyc (614 us) | avg inference 84788 cyc (471 us)
+```
 
 ### 3. Live demo — continuous ADC streaming (`replay/`)
 
@@ -513,8 +541,7 @@ false alerts during healthy stretch: 0
 
 (The one miss, chunk 28, is the alert hysteresis coasting through the first
 `normal` chunk right after the fault ends — not a misclassification of a
-steady-state signal. Full unedited capture in the appendix of
-[`benchmarks/results.md`](benchmarks/results.md).)
+steady-state signal.)
 
 `python test_e2e.py` (still inside `replay/`) runs a no-sockets in-process
 check of the whole chain. Try other faults: `python stream.py --sim --fault
