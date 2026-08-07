@@ -110,10 +110,10 @@ Speed isn't useful if the faster FFT is wrong, so each on-board
 implementation's 128 output features were compared directly against the
 Python reference FFT (same raw window in, same math, different code):
 
-| FFT implementation | max diff vs Python reference | run against |
-|---|---|---|
-| plain-C radix-2 rFFT | ~2.4e-7 | 12-bit ADC pipeline |
-| CMSIS-DSP `arm_rfft_fast_f32` | ~8.7e-6 | 12-bit ADC pipeline |
+| FFT implementation | max diff vs Python reference |
+|---|---|
+| plain-C radix-2 rFFT | ~2.4e-7 |
+| CMSIS-DSP `arm_rfft_fast_f32` | ~8.7e-6 |
 
 For scale, the features themselves typically vary with a standard deviation
 around 0.94 — so even the larger of the two differences (8.7e-6) is about
