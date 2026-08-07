@@ -199,9 +199,7 @@ result.txt     raw captured console output, all benchmark configs + live demo (2
 
 ### Prerequisites
 
-- **Hardware:** Infineon `KIT_PSC3M5_EVK` (Cortex-M33), USB cable. *(Step 4 has
-  a no-hardware path — a software board simulator — for anyone without the
-  board.)*
+- **Hardware:** Infineon `KIT_PSC3M5_EVK` (Cortex-M33), USB cable.
 - **Firmware toolchain:** ModusToolbox™ (includes `arm-none-eabi-gcc`).
 - **ML toolchain:** Python **3.12** — TensorFlow doesn't yet publish wheels for
   newer Python versions, so a newer interpreter will fail at `pip install`.
@@ -483,12 +481,10 @@ one per ADC/DMA half-buffer — to the C3M5 over UART, from the held-out TEST
 region (last 30%) of the CWRU recordings, so nothing streamed was trained on.
 The board **windows the stream itself** (sliding 1024, hop 512) and runs the
 **entire pipeline on-device** — Hann + FFT, INT8 quantize, CMSIS-NN classify —
-then raises a **debounced fault alert** (LED + UART print). The same host script
-also runs against a software board simulator, so the whole chain — framing,
-windowing, FFT, inference, alert logic — is testable with no hardware attached.
+then raises a **debounced fault alert** (LED + UART print).
 
 ```
-CWRU test region ─512-sample ADC chunks─►  UART/TCP  ──►  C3M5 (or board_sim)
+CWRU test region ─512-sample ADC chunks─►  UART  ──►  C3M5
   stream.py                                  slide 1024-window → FFT → INT8 infer
   (fault injection)   ◄──WARM / RES lines──  debounced alert → LED + UART
 ```
@@ -498,20 +494,28 @@ needs **~921600 baud** to keep up in real time (115200 can't) — this is why
 the board's UART is configured for 921600 baud project-wide (see "Flash and
 validate on the board" above), not just for this demo.
 
-**No hardware needed:**
+**Setup:**
 
 ```bash
 python ml/preprocess.py     # one-time: builds files.json / classes.json
 cd replay
 python -m venv .venv && . .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -r requirements.txt   # numpy<2, tflite-runtime, scipy, pyserial
-python stream.py --sim
+```
+
+**Running it:** flash the board with rung 4 or 5 (on-board FFT,
+`INFERENCE_ONLY 0` — see "How to switch between rungs" above; rung 5 is the
+default checked-in config). It runs the self-tests, then enters the ADC-stream
+loop automatically. Find its serial port, then (still inside `replay/`):
+
+```bash
+python stream.py --serial COM5 --baud 921600 --interval 0.0427
 ```
 
 Expect one `WARM` line while the first window fills, then healthy windows
 classified `normal`, a fault injected mid-stream, `ALERT` latching ~2–3 chunks
 later, and clearing once the fault passes. This is real captured output from
-the actual board (`--serial COM5 --baud 921600`, 2026-08-07):
+the actual board (2026-08-07):
 
 ```
 chunk  streamed      pred  conf  fft_cyc  inf_cyc  state
@@ -541,20 +545,6 @@ false alerts during healthy stretch: 0
 (The one miss, chunk 28, is the alert hysteresis coasting through the first
 `normal` chunk right after the fault ends — not a misclassification of a
 steady-state signal.)
-
-`python test_e2e.py` (still inside `replay/`) runs a no-sockets in-process
-check of the whole chain. Try other faults: `python stream.py --sim --fault
-ir_014 --normal 10 --fault-chunks 25 --tail 10`.
-
-**On real hardware:** flash the board with rung 4 or 5 (on-board FFT,
-`INFERENCE_ONLY 0` — see "How to switch between rungs" above; rung 5 is the
-default checked-in config). It runs the self-tests, then enters the ADC-stream
-loop automatically. Find its serial port, then (still inside `replay/`,
-`pyserial` is already covered by `requirements.txt` above):
-
-```bash
-python stream.py --serial COM5 --baud 921600 --interval 0.0427
-```
 
 **Wire protocol** — one binary frame per 512-sample ADC chunk:
 
