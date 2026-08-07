@@ -285,8 +285,7 @@ above shows *what* changes; here's exactly *where*:
 After changing all three things for a rung: `make clean && make build && make
 program`, then read the results off the serial terminal. **Heads up:** the
 `Makefile` and `main.cpp` checked into the firmware repo are already set to
-rung 5's config (the fastest, final build) — so working through the rungs in
-order means editing *backward* from rung 5 to rung 1, not forward.
+rung 5's config (the fastest, final build).
 
 ### 2. Port TFLite-Micro to the board (`firmware/`)
 
