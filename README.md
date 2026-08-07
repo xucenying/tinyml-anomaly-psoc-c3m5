@@ -148,7 +148,7 @@ reproduce" step 2) to fit.
   0.014", 0.021" diameter). Each class was recorded at **4 motor loads**
   (0–3, roughly 0–3 horsepower, ~1,730–1,797 RPM), so every class has 4
   separate recordings, one per load.
-- **Drive-end (DE) channel only**, every recording treated as 12 kHz.
+- **Drive-end (DE) channel only**, only 12 kHz data is used.
 - **12-bit ADC simulation**: each raw sample is quantized to a 12-bit signed count
   at a fixed ±8 g full-scale (clip to [−2048, 2047]) *before* feature extraction —
   the same integer format the board's own ADC produces.

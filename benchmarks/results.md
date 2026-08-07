@@ -10,7 +10,7 @@ Cycle counts are the primary metric (DWT, exact). Latencies = cycles ÷ 180 MHz
 The pipeline was tightened for a fully defensible accuracy number. All results
 below use this methodology:
 
-- **Drive-end (DE) channel only**, every file treated as 12 kHz.
+- **Drive-end (DE) channel only**, only 12 kHz data is used.
 - **12-bit ADC simulation**: each raw sample is quantized to a 12-bit signed
   count at a fixed ±8 g full-scale (clip to [−2048, 2047]) *before* feature
   extraction, so the pipeline runs on the same integer measurements a real MCU
