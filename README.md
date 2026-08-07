@@ -220,6 +220,10 @@ benchmarks/    results.md — the full measured tables and method
   git clone https://github.com/xucenying/tinyml-anomaly-psoc-c3m5-fw.git
   cd tinyml-anomaly-psoc-c3m5-fw && make getlibs && cd ..
   ```
+  `make getlibs` fetches Infineon's PDL/HAL/BSP libraries over the network and
+  can take several minutes (longer the first time, or if you open the project
+  in the ModusToolbox IDE / VS Code right after, which re-runs it while
+  preparing the workspace) — this is normal, just let it finish.
 
 ### 1. Build the model (`ml/`)
 
