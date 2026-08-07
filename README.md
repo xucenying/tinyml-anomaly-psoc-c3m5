@@ -118,10 +118,7 @@ Python reference FFT (same raw window in, same math, different code):
 For scale, the features themselves typically vary with a standard deviation
 around 0.94 — so even the larger of the two differences (8.7e-6) is about
 100,000× smaller than the feature values it's compared against: normal
-floating-point rounding noise, not a computational error. Both on-board FFTs
-are numerically correct; this comparison is also what proved an earlier
-2/10-correct test failure was a stale build, not an actual FFT bug — the
-feature-level match ruled the FFT out.
+floating-point rounding noise, not a computational error.
 
 ## Memory footprint
 
