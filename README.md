@@ -192,7 +192,7 @@ reproduce" step 2) to fit.
 ml/            training, preprocessing, INT8 quantization, header export
 firmware/      on-device code: FFT features, TFLM trees (ref & CMSIS-NN), CMSIS-DSP
 replay/        host-side continuous-ADC streaming + fault-injection demo
-00-research-and-plan.md   background, dataset choice, strategy
+result.txt     raw captured console output, all benchmark configs + live demo (2026-08-07)
 ```
 
 ## Setup and reproduce
