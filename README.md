@@ -112,7 +112,7 @@ Python reference FFT (same raw window in, same math, different code):
 
 | FFT implementation | max diff vs Python reference | run against |
 |---|---|---|
-| plain-C radix-2 rFFT | ~2.4e-7 | 12-bit ADC pipeline (current) |
+| plain-C radix-2 rFFT | ~2.4e-7 | 12-bit ADC pipeline |
 | CMSIS-DSP `arm_rfft_fast_f32` | ~8.7e-6 | 12-bit ADC pipeline |
 
 For scale, the features themselves typically vary with a standard deviation
